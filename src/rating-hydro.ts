@@ -59,7 +59,7 @@ export function installRating(ctx: Context, rating: RatingService, organization:
         catch (error) { if (error instanceof SmsError) throw new ForbiddenError(); throw error; }
         const data = await rating.board(scope.domainId, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all');
         h.response.template = 'sms_ranking.html';
-        h.response.body = { smsBoard: data, smsClassScope: scope, smsRatingApi: h.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, '') };
+        h.response.body = { page_name: 'ranking', smsBoard: data, smsClassScope: scope, smsRatingApi: h.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, '') };
         h.response.addHeader('Cache-Control', 'private, no-store');
         return 'after';
     });
