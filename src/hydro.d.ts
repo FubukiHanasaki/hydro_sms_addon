@@ -12,6 +12,8 @@ export interface Context {
   effect(callback: () => (() => void)): void;
 }
 export class Handler {
+  args: Record<string, any>;
+  domain: { _id: string };
   user: { _id: number; hasPriv(privilege: number): boolean };
   context: {
     method: string;
@@ -29,6 +31,7 @@ export class Handler {
     redirect?: string;
     addHeader(name: string, value: string): void;
   };
+  checkPerm(permission: bigint): void;
   checkPriv(privilege: number): void;
   url(name: string, args?: Record<string, unknown>): string;
 }
@@ -37,6 +40,7 @@ export const UserModel: {
   create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number>;
   setUname(uid: number, username: string): Promise<unknown>;
   setPassword(uid: number, password: string): Promise<unknown>;
+  _deleteUserCache(value: true, receiver?: boolean): void;
   setPriv(uid: number, priv: number): Promise<unknown>;
 };
 export const TokenModel: { delByUid(uid: number): Promise<unknown> };
@@ -48,3 +52,6 @@ export const DomainModel: {
   edit(id: string, data: { name: string; bulletin: string }): Promise<unknown>;
   setJoin(id: string, uid: number, join: boolean): Promise<unknown>;
 };
+
+export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; };
+export const PERM: { PERM_VIEW_RANKING: bigint };

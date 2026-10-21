@@ -1,7 +1,9 @@
+import { RatingService } from './src/rating';
+import { hydroContestGateway, installRating } from './src/rating-hydro';
 import { AccountManagement } from './src/account-management';
 import { disableNativeDomainManagement } from './src/native-domains';
 import { OrganizationService } from './src/organization';
-import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel, TokenModel, Types } from 'hydrooj';
+import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel, TokenModel, Types, PERM } from 'hydrooj';
 import { HydroAccounts } from './src/accounts';
 import { StudentService } from './src/service';
 import { SmsError } from './src/types';
@@ -27,6 +29,10 @@ export async function apply(ctx: Context) {
   await accounts.init();
   ctx.on('handler/before-prepare', async handler => { if (handler.user?._id > 0) await organization.ensureMainMembers(handler.user._id); });
   disableNativeDomainManagement(ctx);
+  const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
+  await rating.init();
+  installRating(ctx, rating);
+  UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
     handler.response.addHeader('Cache-Control', 'private, no-store');
@@ -37,7 +43,7 @@ export async function apply(ctx: Context) {
       this.checkPriv(PRIV.PRIV_USER_PROFILE);
       privateResponse(this);
       this.response.template = 'sms_panel.html';
-      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts') };
+      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts'), smsRating: this.url('sms_api_rating_board'), smsRatingHistory: this.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, ''), smsRatingImport: this.url('sms_api_rating_import'), smsRatingContests: this.url('sms_api_rating_contests') };
     }
   }
   class SmsApiHandler extends Handler {
@@ -91,6 +97,27 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.filterOptions(this.user._id)); }
   }
 
+  class SmsRatingBoardHandler extends SmsApiHandler {
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.board(this.args.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school)); }
+  }
+  class SmsRatingHistoryHandler extends SmsApiHandler {
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.history(this.context.params.uid, this.context.query.page ?? 1)); }
+  }
+  class SmsRatingImportHandler extends SmsApiHandler {
+    async post() { await this.run(() => rating.importRecords(this.user._id, this.body())); }
+  }
+  class SmsRatingContestsHandler extends SmsApiHandler {
+    async get() { await this.run(() => rating.configList(this.user._id)); }
+    async post() { await this.run(() => rating.configure(this.user._id, this.body())); }
+  }
+  class SmsRatingRecalculateHandler extends SmsApiHandler {
+    async post() { await this.run(async () => { await service.requireAdmin(this.user._id); await rating.sync(this.user._id); return { revision: (await rating.head()).revision }; }); }
+  }
+  ctx.Route('sms_api_rating_board', '/sms/api/rating/board', SmsRatingBoardHandler);
+  ctx.Route('sms_api_rating_history', '/sms/api/rating/users/:uid', SmsRatingHistoryHandler);
+  ctx.Route('sms_api_rating_import', '/sms/api/rating/import', SmsRatingImportHandler);
+  ctx.Route('sms_api_rating_contests', '/sms/api/rating/contests', SmsRatingContestsHandler);
+  ctx.Route('sms_api_rating_recalculate', '/sms/api/rating/recalculate', SmsRatingRecalculateHandler);
   class SmsAccountsHandler extends SmsApiHandler {
     async get() { await this.run(() => accounts.list(this.user._id, this.context.query.q, this.context.query.enabled, this.context.query.page)); }
     async post() { await this.run(() => accounts.create(this.user._id, this.body())); }
@@ -129,7 +156,7 @@ export async function apply(ctx: Context) {
   ctx.Route('sms_api_users', '/sms/api/users', SmsUsersHandler);
   ctx.Route('sms_api_student_filters', '/sms/api/student-filters', SmsStudentFiltersHandler);
   ctx.injectUI('Nav', 'sms_panel', { prefix: 'sms' }, PRIV.PRIV_USER_PROFILE);
-  ctx.i18n.load('zh', { sms_panel: '学生管理' });
+  ctx.i18n.load('zh', { sms_panel: '学生管理', 'Solved {0} problems': '已通过 {0} 题' });
   ctx.i18n.load('en', { sms_panel: 'Student management' });
   ctx.on('handler/after/UserDetail', async (handler) => {
     privateResponse(handler);

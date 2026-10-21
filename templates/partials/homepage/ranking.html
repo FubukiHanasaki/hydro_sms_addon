@@ -1,0 +1,40 @@
+{# Based on Hydro ui-default (AGPL-3.0); Rating integration by FubukiHanasaki. #}
+{% if payload.length %}
+  <div class="section">
+    <div class="section__header">
+      <h1 class="section__title">{{ _('Ranking') }}</h1>
+    </div>
+    <div class="section__body no-padding" style="overflow: hidden">
+      <table class="data-table">
+        <colgroup>
+          <col class="col--rank">
+          <col class="col--user">
+          <col class="col--rp">
+          <col class="col--bio">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="col--rank">{{ _('Rank') }}</th>
+            <th class="col--user">{{ _('Username') }}</th>
+            <th class="col--rp">Rating</th>
+            <th class="col--bio">{{ _('Bio') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {%- for uid in payload -%}
+            {% set udoc = udict[uid] %}
+            <tr>
+              <td class="col--rank">{{ loop.index }}</td>
+              <td class="col--user">{{ user.render_inline(udoc, levelbadge=false) }}</td>
+              <td class="col--rp">{{ udoc.smsRating.rating|default(0) }}</td>
+              <td class="col--bio">{{ udoc.bio|default('')|truncate(64, true)|markdownInline|safe }}</td>
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+    </div>
+    <ul class="pager pager-bottom"><li>
+      <a class="pager__item next link" href="{{ url('ranking') }}">{{ _('More') }} ></a>
+    </li></ul>
+  </div>
+{% endif %}
