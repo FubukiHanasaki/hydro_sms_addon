@@ -14,3 +14,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 outputs/
+
+# Local agent instructions
+AGENTS.md
+agents.md
