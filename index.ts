@@ -1,3 +1,4 @@
+import { AcademicService } from './src/academic';
 import { ScheduleBatchService } from './src/schedule-batch';
 import { ExportService } from './src/exports';
 import { StudentImportService } from './src/student-import';
@@ -46,9 +47,10 @@ export async function apply(ctx: Context) {
   installRating(ctx, rating, organization);
   const teaching = new TeachingService(ctx.db.db, service, organization, rating);
   await teaching.init();
+  const academic = new AcademicService(ctx.db.db,service,organization,teaching);
   const scheduleBatches = new ScheduleBatchService(ctx.db.db, service, organization, teaching);
   await scheduleBatches.init();
-  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport, scheduleBatches);
+  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport, scheduleBatches, academic);
   UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
@@ -106,6 +108,17 @@ export async function apply(ctx: Context) {
     }
   }
   ctx.Route('sms_api_export','/sms/api/exports/:kind',SmsExportHandler);
+  class SmsAuthorizationHandler extends SmsApiHandler {
+    async get(){await this.run(()=>service.authorization.manage(this.user._id));}
+    async post(){await this.run(()=>service.authorization.update(this.user._id,this.body()));}
+  }
+  class SmsEffectiveHandler extends SmsApiHandler {async get(){await this.run(()=>(async()=>{const target=Number(this.context.query.uid||this.user._id);if(target!==this.user._id)await service.requireAdmin(this.user._id);if(!Number.isSafeInteger(target)||target<=0)throw new SmsError(400,'UID 无效');return service.authorization.snapshot(target);})());}}
+  class SmsAcademicHandler extends SmsApiHandler {async get(){await this.run(()=>academic.board(this.user._id,this.context.query));}}
+  ctx.Route('sms_api_authorization','/sms/api/authorization',SmsAuthorizationHandler);
+  ctx.Route('sms_api_effective','/sms/api/authorization/effective',SmsEffectiveHandler);
+  ctx.Route('sms_api_academic','/sms/api/teaching/academic',SmsAcademicHandler);
+  class SmsRosterCandidatesHandler extends SmsApiHandler {async get(){await this.run(()=>academic.candidates(this.user._id,this.context.params.id,this.context.query.q));}}
+  ctx.Route('sms_api_roster_candidates','/sms/api/classes/:id/roster-candidates',SmsRosterCandidatesHandler);
   class SmsMeHandler extends SmsApiHandler {
     async get() { await this.run(() => service.me(this.user._id)); }
   }
@@ -125,7 +138,7 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.auditList(this.user._id)); }
   }
   class SmsUsersHandler extends SmsApiHandler {
-    async get() { await this.run(() => service.searchUsers(this.user._id, this.context.query.q, this.context.query.studentId)); }
+    async get() { await this.run(() => service.searchUsers(this.user._id, this.context.query.q, this.context.query.studentId, this.context.query.classId)); }
   }
   class SmsStudentFiltersHandler extends SmsApiHandler {
     async get() { await this.run(() => service.filterOptions(this.user._id)); }
@@ -145,7 +158,7 @@ export async function apply(ctx: Context) {
     async post() { await this.run(() => rating.configure(this.user._id, this.body())); }
   }
   class SmsRatingRecalculateHandler extends SmsApiHandler {
-    async post() { await this.run(async () => { await service.requireAdmin(this.user._id); await rating.sync(this.user._id); return { revision: (await rating.head()).revision }; }); }
+    async post() { await this.run(async () => { await service.requireAction(this.user._id,'rating.recalculate'); await rating.sync(this.user._id); return { revision: (await rating.head()).revision }; }); }
   }
   ctx.Route('sms_api_rating_board', '/sms/api/rating/board', SmsRatingBoardHandler);
   ctx.Route('sms_api_rating_history', '/sms/api/rating/users/:uid', SmsRatingHistoryHandler);

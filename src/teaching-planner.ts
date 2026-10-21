@@ -1,3 +1,4 @@
+import { readFilter } from './access';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { createHash, randomUUID } from 'node:crypto';
 import { Db, ObjectId } from 'mongodb';
@@ -46,11 +47,11 @@ export class TeachingPlanner {
  }
  async context(actor: number, domainId: string, write = false, admin = false) {
   const meta = await this.org.metadata(domainId), domain = await this.org.domain(meta?.domainId || domainId), ctx = await this.org.access(actor, domain, meta);
-  if (write && (!ctx.staff || admin && !ctx.me.admin)) fail('没有对应教学管理权限', 403);
+  if (write && !ctx.staff && !await this.students.authorization.can(actor,admin?'schedules.create':'courses.create',[domain._id])) fail('没有对应教学管理权限', 403);
   return { ...ctx, domain, meta };
  }
  async teacher(domainId: string, value: unknown) { const uid = positiveInt(value, '教师 UID'); if (!(await this.org.metadata(domainId))?.teacherUids.includes(uid) || !await this.org.joined(domainId, uid)) fail('请选择本班当前任课教师'); return uid; }
- async classes(actor: number) { const classes = await this.org.domainList(actor); return Promise.all(classes.map(async c => { const ctx = await this.context(actor, c._id); return { id: c._id, name: c.name || c._id, canTeach: ctx.staff }; })); }
+ async classes(actor: number) { const classes = await this.org.domainList(actor); return Promise.all(classes.map(async c => { const ctx = await this.context(actor, c._id); return { id: c._id, name: c.name || c._id, canTeach:await this.students.authorization.can(actor,'courses.create',[c._id])||await this.students.authorization.can(actor,'courses.update',[c._id]) }; })); }
  build(p: Plan, from: string, to: string): Lesson[] {
   const out: Lesson[] = [];
   for (let t = Date.parse(from); t <= Date.parse(to); t += 86400000) {
@@ -75,9 +76,15 @@ export class TeachingPlanner {
   const moved = await this.adjustments.findOne({ _id: id, domainId }); if (!moved) return fail('课次不存在', 404);
   return (await this.instances(domainId, moved.lesson.date, moved.lesson.date)).find(l => l.id === id) || fail('课次不存在', 404);
  }
+ async occupancy(from:string,to:string){
+  const lessons=await this.instances(null,from,to),records=await this.records.find({date:{$gte:from,$lte:to}}).toArray();
+  for(const c of records){if(c.planned&&c.date===c.planned.date&&c.start===c.planned.start&&c.end===c.planned.end&&c.teacherUid===c.planned.teacherUid&&c.location===c.planned.location)continue;
+   lessons.push({id:`actual:${c._id}`,planId:`actual:${c._id}`,domainId:c.domainId,originalDate:c.date,date:c.date,start:c.start,end:c.end,title:c.title,teacherUid:c.teacherUid,location:c.location,color:'blue',status:'completed',version:digest([c._id,c.version]),makeupFor:'',courseId:c._id});
+  }return lessons;
+ }
  async conflicts(proposed: Lesson[], excludePlan?: string, excludeLesson?: string) {
   const active = proposed.filter(l => l.status === 'planned' || l.status === 'completed'); if (!active.length) return;
-  const dates = active.map(l => l.date).sort(), old = await this.instances(null, dates[0], dates.at(-1)!);
+  const dates = active.map(l => l.date).sort(), old = await this.occupancy(dates[0], dates.at(-1)!);
   const overlap = (a: Lesson, b: Lesson) => a.date === b.date && a.start < b.end && b.start < a.end && (a.domainId === b.domainId || a.teacherUid === b.teacherUid || !!a.location && a.location === b.location);
   for (let i = 0; i < active.length; i++) { const a = active[i]; if (active.slice(0, i).some(b => overlap(a, b)) || old.some(b => b.id !== excludeLesson && (b.planId !== excludePlan || b.status === 'completed') && ['planned', 'completed'].includes(b.status) && overlap(a, b))) fail(`${a.date} ${a.start}–${a.end} 班级、教师或教室冲突`, 409); }
  }
@@ -86,7 +93,7 @@ export class TeachingPlanner {
   return this.plans.find({$and:[filter,{$or:[{batchId:{$exists:false}},{batchId:{$in:committed.map(j=>String(j._id))}}]}]}).toArray();
  }
  async normalizePlan(actor:number,domainId:string,b:Record<string,unknown>,old?:Plan|null) {
-  const ctx=await this.context(actor,domainId,true,true);domainId=ctx.domain._id;if(ctx.meta?.status==='archived')fail('归档班级不能排课');
+  const ctx=await this.context(actor,domainId);domainId=ctx.domain._id;await this.students.requireAction(actor,old?'schedules.update':'schedules.create',[domainId]);await this.students.requireAction(actor,'schedules.read',[domainId]);if(ctx.meta?.status==='archived')fail('归档班级不能排课');
    const r = period(b.from, b.to, 730), title = text(b.title, 100, '排课名称'); if (!title) fail('请填写排课名称');
    if (old && r.from < old.revisions.at(-1)!.from) fail('生效日期不能早于最近一次排课修改');
    if (!['active','draft','paused'].includes(String(b.status))) fail('排课状态无效');
@@ -101,7 +108,7 @@ export class TeachingPlanner {
  async savePlan(actor: number, domainId: string, value: unknown) {
   const b = object(value); this.org.fields(b, ['id','version','title','teacherUid','location','color','status','from','to','slots','remark','makeupFor','requestId','preview','previewToken']);
   return this.org.locked('__sms_teaching__', async verify => {
-   const ctx = await this.context(actor, domainId, true, true); domainId = ctx.domain._id; if (ctx.meta?.status === 'archived') fail('归档班级不能排课');
+   const ctx = await this.context(actor, domainId); domainId = ctx.domain._id; await this.students.requireAction(actor,b.id?'schedules.update':'schedules.create',[domainId]); if (ctx.meta?.status === 'archived') fail('归档班级不能排课');
    const requestId = text(b.requestId, 80, '请求标识'); if (!/^[\w-]{8,80}$/.test(requestId)) fail('请求标识无效');
    const id = b.id ? text(b.id, 160, '排课 ID') : `plan:${domainId}:${requestId}`, old = (await this.publishedPlans({ _id: id, domainId }))[0];
    const inputHash = digest({ ...b, preview: undefined, previewToken: undefined });
@@ -123,7 +130,7 @@ export class TeachingPlanner {
  async saveCourse(actor: number,domainId: string,value: unknown) {
   const b=object(value);this.org.fields(b,['id','version','requestId','date','start','end','title','teacherUid','location','content','remark','examId','attendance','lessonId','lessonVersion']);
   return this.org.locked('__sms_teaching__',async verify=>{
-   const ctx=await this.context(actor,domainId,true);domainId=ctx.domain._id;
+   const ctx=await this.context(actor,domainId);domainId=ctx.domain._id;await this.students.requireAction(actor,b.id?'courses.update':'courses.create',[domainId]);await this.students.requireAction(actor,'courses.read',[domainId]);
    const request=text(b.requestId,80,'请求标识');if(!/^[\w-]{8,80}$/.test(request))fail('请求标识无效');
    const id=b.id?text(b.id,200,'课程 ID'):`record:${domainId}:${request}`,old=await this.records.findOne({_id:id,domainId});
    if(b.id&&!old)return fail('实际课程不存在',404);
@@ -138,26 +145,27 @@ export class TeachingPlanner {
    const title=text(b.title,100,'课程内容标题');if(!title)fail('请填写课程名称');
    const teacherUid=old?.teacherUid===b.teacherUid?positiveInt(b.teacherUid,'教师 UID'):await this.teacher(domainId,b.teacherUid),detail=await this.org.classDetail(actor,domainId),allowed=new Set([...detail.students.map(s=>s.hydroUid),...(old?.attendance.map(a=>a.uid)??[])]);
    if(!Array.isArray(b.attendance)||b.attendance.length>1000)return fail('考勤名单无效');
+   const external=await this.students.authorization.can(actor,'courses.roster',[domainId]);if(external){const policy=await this.students.studentPolicy(actor),filter=readFilter(policy,actor);const extra=await this.students.students.find(filter,{projection:{hydroUid:1}}).toArray();extra.forEach(s=>{if(s.hydroUid)allowed.add(s.hydroUid);});}
    const seen=new Set<number>(),attendance=b.attendance.map(v=>{const a=object(v);this.org.fields(a,['uid','status','remark']);const uid=positiveInt(a.uid);if(seen.has(uid)||!allowed.has(uid))fail('名单重复或学生不属于本班');seen.add(uid);const status=text(a.status,10,'考勤');if(!ATTENDANCE.includes(status))fail('考勤状态无效');return {uid,status,remark:text(a.remark??'',500,'考勤备注')};});
    if(old?.attendance.some(a=>a.status&&!seen.has(a.uid)))fail('不能遗漏已有考勤记录');
    const examId=text(b.examId??'',24,'模拟赛');if(examId&&(!ObjectId.isValid(examId)||!await this.db.collection('document').findOne({domainId,docType:30,docId:new ObjectId(examId)})))fail('关联模拟赛不属于当前班级');
    const row: Actual={_id:id,domainId,date:dateValue,start,end,title,teacherUid,location:text(b.location??'',160,'地点'),content:text(b.content??'',10000,'教学内容'),remark:text(b.remark??'',2000,'课程备注'),examId,attendance,...lesson?{lessonId,planned:old?.planned??lesson}:{},version:(old?.version??0)+1,updatedAt:new Date(),updatedBy:actor,requestHash:digest(b)};
-   await verify();await this.students.mutation(actor,'courses.record',id,['date','title','teacherUid','content','attendance','examId'],async()=>{if(old){const r=await this.records.replaceOne({_id:id,version:old.version},row);if(!r.matchedCount)fail('课程已更新',409);}else await this.records.insertOne(row);});
+   await verify();await this.students.requireAction(actor,old?'courses.update':'courses.create',[domainId]);await this.students.mutation(actor,'courses.record',id,['date','title','teacherUid','content','attendance','examId'],async()=>{if(old){const r=await this.records.replaceOne({_id:id,version:old.version},row);if(!r.matchedCount)fail('课程已更新',409);}else await this.records.insertOne(row);});
    return {saved:true,id,version:row.version};
   });
  }
  async changeLesson(actor:number,domainId:string,id:string,value:unknown){
   const b=object(value);this.org.fields(b,['version','action','date','start','end','teacherUid','location','reason','courseId','courseVersion','previewToken']);
   return this.org.locked('__sms_teaching__',async verify=>{
-   const ctx=await this.context(actor,domainId,true);domainId=ctx.domain._id;const lesson=await this.resolve(domainId,id);if(lesson.version!==b.version)fail('课次已更新，请重新打开',409);
-   if(b.action==='linkPreview'||b.action==='link'){
+   const ctx=await this.context(actor,domainId);domainId=ctx.domain._id;await this.students.requireAction(actor,['link','linkPreview'].includes(String(b.action))?'courses.link':'schedules.adjust',[domainId]);const lesson=await this.resolve(domainId,id);if(lesson.version!==b.version)fail('课次已更新，请重新打开',409);
+   if(b.action==='linkPreview'||b.action==='link'){await this.students.requireAction(actor,'courses.update',[domainId]);await this.students.requireAction(actor,'courses.read',[domainId]);await this.students.requireAction(actor,'schedules.read',[domainId]);
     const c=await this.records.findOne({_id:text(b.courseId,200,'实际课程'),domainId});if(!c)return fail('实际课程不存在',404);if(c.version!==b.courseVersion)fail('实际课程已更新',409);
     if(['cancelled','draft'].includes(lesson.status))fail('该计划课次不能关联实际课程');
     if(c.lessonId&&c.lessonId!==id||await this.records.findOne({domainId,lessonId:id,_id:{$ne:c._id}}))fail('课程或计划课次已经关联',409);
     const token=digest([lesson,c]);if(b.action==='linkPreview')return {previewToken:token,title:c.title,date:c.date,attendanceCount:c.attendance.filter(a=>a.status).length};
     if(b.previewToken!==token)fail('关联预览已变化',409);await verify();await this.students.mutation(actor,'courses.link',c._id,['lessonId'],async()=>{const r=await this.records.updateOne({_id:c._id,version:c.version},{$set:{lessonId:id,planned:lesson,updatedBy:actor,updatedAt:new Date()},$inc:{version:1}});if(!r.matchedCount)fail('课程已更新',409);});return {saved:true};
    }
-   if(!ctx.me.admin)fail('只有插件管理员可调整排课',403);if(lesson.status==='completed')fail('已有实际课程，不能直接改动计划课次');
+   if(lesson.status==='completed')fail('已有实际课程，不能直接改动计划课次');
    const next={...lesson};
    if(b.action==='cancel')next.status='cancelled';else if(b.action==='restore'){if(lesson.status!=='cancelled')fail('仅能恢复停课课次');next.status='planned';}
    else if(b.action==='adjust'){next.date=date(b.date);next.start=time(b.start);next.end=time(b.end);if(next.start>=next.end)fail('结束时间必须晚于开始时间');next.teacherUid=await this.teacher(domainId,b.teacherUid);next.location=text(b.location??'',160,'地点');}else fail('操作无效');

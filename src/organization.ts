@@ -44,15 +44,14 @@ export class OrganizationService {
     const me = await this.students.me(uid);
     const joined = uid > 0 && await this.joined(domain._id, uid);
     const teacher = joined && !!metadata?.teacherUids.includes(uid);
-    if (!me.admin && !teacher && !(joined && (me.boundStudentId || domain._id === 'system'))) throw new SmsError(404, '班级与子域不存在或无权查看');
-    return { me, staff: me.admin || teacher };
+    const readable = await this.students.authorization.can(uid,'classes.read',[domain._id]) || await this.students.authorization.can(uid,'courses.read',[domain._id]) || await this.students.authorization.can(uid,'schedules.read',[domain._id]) || await this.students.authorization.can(uid,'reports.read',[domain._id]);
+    const delegated = (await Promise.all(['classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.can(uid,code,[domain._id])))).some(Boolean);
+    if (!me.admin && !readable && !delegated) throw new SmsError(404,'班级与子域不存在或无权查看');
+    return {me,staff:await this.students.authorization.fullRead(uid,domain._id),teacher};
   }
   async allowedDomains(uid: number) {
-    const me = await this.students.me(uid); if (me.admin) return null;
-    const joined: string[] = await this.db.collection('domain.user').distinct('domainId', { uid, join: true });
-    if (me.boundStudentId) return joined;
-    const taught = await this.classes.distinct('domainId', { teacherUids: uid });
-    return joined.filter(id => id === 'system' || taught.includes(id));
+    const scopes=await Promise.all(['classes.read','courses.read','schedules.read','reports.read','classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.scope(uid,code)));
+    return scopes.includes(null)?null:[...new Set(scopes.flatMap(v=>v??[]))];
   }
   async domainList(uid: number) {
     const ids = await this.allowedDomains(uid);
@@ -82,8 +81,8 @@ export class OrganizationService {
     ]).toArray();
     const classes = await Promise.all((result?.rows ?? []).map(async (row: Document) => {
       const meta = row.metadata[0] as ClassDoc | undefined;
-      const staff = me.admin || (!!meta?.teacherUids.includes(uid) && await this.joined(row._id, uid));
-      return { _id: row._id, domainId: row._id, name: row.name || row._id, type: meta?.type || '', academicYear: meta?.academicYear || '', status: row.status, version: meta?.version ?? 0, ...(staff ? { memberCount: await this.db.collection('domain.user').countDocuments({ domainId: row._id, uid: { $gt: 0 }, join: true }) } : {}) };
+      const staff = (await this.access(uid,row as DomainDoc,meta??null)).staff;
+      return { _id: row._id, domainId: row._id, name: row.name || row._id, type: meta?.type || '', academicYear: meta?.academicYear || '', status: row.status, canEdit:await this.students.authorization.can(uid,'classes.update',[row._id]), version: meta?.version ?? 0, ...(staff ? { memberCount: await this.db.collection('domain.user').countDocuments({ domainId: row._id, uid: { $gt: 0 }, join: true }) } : {}) };
     }));
     return { total: result?.count[0]?.total ?? 0, page, classes };
   }
@@ -99,7 +98,7 @@ export class OrganizationService {
     return {
       _id: domain._id, domainId: domain._id, name: domain.name || domain._id, description: domain.bulletin || '',
       type: metadata?.type || '', academicYear: metadata?.academicYear || '', schedule: metadata?.schedule || '', location: metadata?.location || '', status: metadata?.status || 'active',
-      version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: me.admin,
+      version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: await this.students.authorization.can(uid,'classes.update',[domain._id]),
       ...(me.admin ? { owner: domain.owner } : {}), ...(staff ? { memberCount: uids.length } : {}),
       students: students.map(s => ({ id: s._id, name: s.basic.name, grade: s.basic.grade, school: s.basic.school, hydroUid: s.hydroUid })),
       teachers: teachers.map(t => ({ uid: t._id, username: t.uname, name: teacherProfiles.find(p => p.hydroUid === t._id)?.basic?.name || t.uname })),
@@ -116,7 +115,7 @@ export class OrganizationService {
     try { return await work(verify); } finally { await locks.deleteOne({ _id: id, token }); }
   }
   async classSave(uid: number, id: string | null, value: unknown) {
-    await this.students.requireAdmin(uid); const input = object(value);
+    const input = object(value);
     this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain']);
     const domainId = text(input.domainId, 64, '子域 ID').toLowerCase();
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(domainId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
@@ -127,6 +126,8 @@ export class OrganizationService {
     const version = input.version ?? 0; if (!Number.isSafeInteger(version) || (version as number) < 0) throw new SmsError(400, '版本无效');
     return this.locked(domainId, async verify => {
       const previous = await this.metadata(id || domainId);
+      await this.students.requireAction(uid, input.createDomain ? 'classes.create' : 'classes.update', input.createDomain ? [] : [domainId]);if(input.createDomain)await this.students.requireAction(uid,'classes.read');
+      if(previous && previous.status!==data.status) await this.students.requireAction(uid,'classes.archive',[domainId]);
       if (previous && previous.domainId !== domainId) throw new SmsError(400, '不能修改已关联的子域 ID');
       if (id && !previous && id !== domainId) throw new SmsError(404, '班级与子域不存在');
       const domain = await this.domains.findOne({ _id: domainId });
@@ -147,7 +148,7 @@ export class OrganizationService {
     });
   }
   async domainSave(uid: number, value: unknown) {
-    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['action', 'id', 'name', 'bulletin', 'version']);
+    const input = object(value); this.fields(input, ['action', 'id', 'name', 'bulletin', 'version']);
     if (!['create', 'update'].includes(String(input.action))) throw new SmsError(400, '操作无效');
     const id = text(input.id, 64, '子域 ID').toLowerCase(); const meta = await this.metadata(id);
     // Compatibility endpoint uses the same save path; updates require a revision.
@@ -159,26 +160,29 @@ export class OrganizationService {
     if (domain._id === 'system') await this.ensureMainMembers();
     const q = text(query ?? '', 80, '搜索词'); const page = this.page(pageValue);
     const teachers = meta?.teacherUids ?? [];
+    const canManage=await this.students.authorization.can(uid,'classes.members',[domain._id]),canTeachers=await this.students.authorization.can(uid,'classes.teachers',[domain._id]);
     const [result] = await this.db.collection('domain.user').aggregate([
       { $match: { domainId: domain._id, join: true, uid: staff ? { $gt: 0 } : uid } },
       { $lookup: { from: 'user', localField: 'uid', foreignField: '_id', as: 'user' } }, { $unwind: '$user' },
       { $lookup: { from: 'sms_students', localField: 'uid', foreignField: 'hydroUid', pipeline: [{ $project: { 'basic.name': 1 } }], as: 'student' } },
       ...q ? [{ $match: { $or: [{ 'user.uname': { $regex: this.pattern(q), $options: 'i' } }, { 'student.basic.name': { $regex: this.pattern(q), $options: 'i' } }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } }] : [],
-      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [me.admin, { $ne: ['$uid', domain.owner] }, domain._id !== 'system'] } } }] } },
+      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [canManage, { $ne: ['$uid', domain.owner] }, domain._id !== 'system'] } } }] } },
     ]).toArray();
-    return { total: result?.count[0]?.total ?? 0, members: (result?.members ?? []).map((member: Document) => ({ ...member, kind: meta?.memberKinds?.[String(member.uid)] ?? member.kind })), page, pageSize: 20, version: meta?.version ?? 0, canManage: me.admin };
+    return { total: result?.count[0]?.total ?? 0, members: (result?.members ?? []).map((member: Document) => ({ ...member, kind: meta?.memberKinds?.[String(member.uid)] ?? member.kind })), page, pageSize: 20, version: meta?.version ?? 0, canManage, canTeachers };
   }
   async domainMembership(uid: number, id: string, value: unknown) {
-    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['uid', 'joined', 'kind', 'version', 'roleOnly']);
+    const input = object(value); this.fields(input, ['uid', 'joined', 'kind', 'version', 'roleOnly']);
     const target = await this.students.assertUser(input.uid); if (!target || typeof input.joined !== 'boolean') throw new SmsError(400, '请指定有效账号与加入状态');
     const kind = input.kind ?? 'member'; if (!['member', 'teacher', 'student'].includes(String(kind))) throw new SmsError(400, '成员身份无效');
     if (input.roleOnly !== undefined && typeof input.roleOnly !== 'boolean') throw new SmsError(400, '身份修改标识无效');
     if (!Number.isSafeInteger(input.version) || (input.version as number) < 0) throw new SmsError(400, '成员修改需要有效版本号');
     if (input.roleOnly && input.kind === undefined) throw new SmsError(400, '请选择要修改的成员身份');
     const initial = await this.metadata(id); const domainId = initial?.domainId || id;
+    await this.students.requireAction(uid,'classes.members',[domainId]);
+    if(kind==='teacher'||initial?.teacherUids.includes(target))await this.students.requireAction(uid,'classes.teachers',[domainId]);
     if (domainId !== 'system' && kind === 'student' && !await this.students.students.findOne({ hydroUid: target })) throw new SmsError(400, '该账号尚未绑定学生档案，请先创建或绑定学生');
     return this.locked(domainId, async verify => {
-      const domain = await this.domain(domainId); const meta = await this.metadata(domainId);
+      const domain = await this.domain(domainId); const meta = await this.metadata(domainId);await this.students.requireAction(uid,'classes.members',[domainId]);if(kind==='teacher'||meta?.teacherUids.includes(target))await this.students.requireAction(uid,'classes.teachers',[domainId]);
       if ((meta?.version ?? 0) !== input.version) throw new SmsError(409, '成员或资料已更新，请刷新名册后重试');
       if (domainId === 'system' && !input.joined) throw new SmsError(400, '主域所有账号默认加入，不能移除成员');
       if (input.roleOnly && (!input.joined || !await this.joined(domainId, target))) throw new SmsError(400, '只能修改已有成员的身份');

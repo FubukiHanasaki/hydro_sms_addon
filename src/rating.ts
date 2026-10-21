@@ -145,7 +145,7 @@ export class RatingService {
         }
     }
     async importRecords(actor: number, input: unknown) {
-        await this.students.requireAdmin(actor);
+        await this.students.requireAction(actor,'rating.import');
         const body = object(input);
         if (!Array.isArray(body.records) || !body.records.length || body.records.length > 500)
             throw new SmsError(400, '每次导入 1–500 条记录');
@@ -177,7 +177,7 @@ export class RatingService {
         return { ...result, received: records.length, added, duplicates: records.length - added };
     }
     async configList(actor: number) {
-        await this.students.requireAdmin(actor);
+        await this.students.requireAction(actor,'rating.configure');
         const head = await this.head();
         const contests = await this.db.collection('document').find({ docType: 30, rule: { $in: ['oi', 'ioi', 'acm', 'strictioi'] } }).sort({ beginAt: -1 }).limit(200).project({ docId: 1, domainId: 1, title: 1, beginAt: 1, endAt: 1, rule: 1, rated: 1 }).toArray();
         const configs = await this.db.collection<{
@@ -190,7 +190,7 @@ export class RatingService {
         return { revision: head.revision, difficulties: DIFFICULTIES, bands: BANDS, contests: contests.map(c => { const key = `${c.domainId}:${c.docId}`, config = configs.find(k => k._id === key), source = sources.find(s => s.key === `contest:${key}`); return { id: String(c.docId), domainId: c.domainId, title: c.title, endAt: c.endAt, rule: c.rule, enabled: config?.enabled ?? false, difficulty: config?.difficulty ?? 'CSP-J', settled: !!source, participants: source?.participants?.length ?? 0, error: config?.error ?? '' }; }) };
     }
     async configure(actor: number, input: unknown) {
-        await this.students.requireAdmin(actor);
+        await this.students.requireAction(actor,'rating.configure');
         const b = object(input), domainId = text(b.domainId, 160, '子域 ID'), contestId = text(b.contestId, 24, '比赛 ID');
         if (!/^[a-f\d]{24}$/i.test(contestId) || !DIFFICULTIES.includes(b.difficulty as Difficulty) || typeof b.enabled !== 'boolean')
             throw new SmsError(400, '比赛配置无效');

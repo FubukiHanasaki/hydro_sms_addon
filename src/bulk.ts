@@ -15,16 +15,17 @@ const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).dige
 export class BulkService {
   constructor(private db: Db, private students: StudentService, private accounts: AccountManagement, private provisioner: AccountGateway) {}
   get jobs() { return this.db.collection<Job>('sms_bulk_jobs'); }
+  async permission(actor:number,kind:Kind){const codes=kind==='promotion'?['students.promote','students.write','students.read']:kind==='provision'?['accounts.provision','students.bind','students.read']:['accounts.password','accounts.read'];for(const code of codes)await this.students.requireAction(actor,code);return this.students.policy();}
   async init() { await this.jobs.createIndex({ createdAt: -1 }); await this.jobs.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); }
   async rows() { return this.students.students.find({}, { projection: { 'basic.name': 1, 'basic.grade': 1, 'basic.status': 1, hydroUid: 1, version: 1, gradeRevision: 1, gradeBatch: 1 } }).sort({_id:1}).toArray(); }
   digest(rows: Student[]) { return hash(rows.map(s => [s._id,s.basic.name,s.basic.grade,s.basic.status,s.hydroUid??null,s.version,s.gradeRevision??0])); }
   async generation() { return hash(await this.jobs.find({kind:'promotion', status:{$ne:'preview'}}, {projection:{status:1,undoneAt:1}}).sort({_id:1}).toArray()); }
   summary(j: Job, canUndo = false) { return { id:j._id,kind:j.kind,status:j.status,actor:j.actor,lastActor:j.lastActor,createdAt:j.createdAt,startedAt:j.startedAt,completedAt:j.completedAt,undoneAt:j.undoneAt,warning:j.warning,total:j.items.length,done:j.items.filter(i=>i.done).length,undone:j.items.filter(i=>i.undone).length,skipped:j.skipped.length,canUndo }; }
-  async history(actor: number) { await this.students.requireAdmin(actor); const latest=await this.jobs.find({kind:'promotion',status:'completed'}).sort({sequence:-1}).limit(1).next(); return (await this.jobs.find({status:{$ne:'preview'}}).sort({createdAt:-1}).limit(100).toArray()).map(j=>this.summary(j,j._id===latest?._id)); }
-  async detail(actor: number, id: string) { await this.students.requireAdmin(actor); const j=await this.jobs.findOne({_id:id});if(!j)throw new SmsError(404,'批次不存在');if(j.status==='preview'&&j.actor!==actor)throw new SmsError(403,'预览不属于当前管理员');return {...this.summary(j),items:j.items,skippedItems:j.skipped}; }
+  async history(actor: number) { const kinds:Kind[]=[];for(const kind of ['promotion','provision','password'] as Kind[])try{await this.permission(actor,kind);kinds.push(kind);}catch{}if(!kinds.length)throw new SmsError(403,'没有批量操作记录权限'); const latest=await this.jobs.find({kind:'promotion',status:'completed'}).sort({sequence:-1}).limit(1).next(); return (await this.jobs.find({status:{$ne:'preview'},kind:{$in:kinds}}).sort({createdAt:-1}).limit(100).toArray()).map(j=>this.summary(j,j._id===latest?._id)); }
+  async detail(actor: number, id: string) { if(!(await this.students.me(actor)).admin&&!(await Promise.all(['students.promote','accounts.provision','accounts.password'].map(code=>this.students.authorization.can(actor,code,[])))).some(Boolean))throw new SmsError(403,'没有批量操作权限');const j=await this.jobs.findOne({_id:id});if(j)await this.permission(actor,j.kind);if(!j)throw new SmsError(404,'批次不存在');if(j.status==='preview'&&j.actor!==actor)throw new SmsError(403,'预览不属于当前管理员');return {...this.summary(j),items:j.items,skippedItems:j.skipped}; }
   async preview(actor: number, value: unknown) {
-    await this.students.requireAdmin(actor); const b=object(value);this.students.checkFields(b,['kind','resumeIds','uids']);
-    const kind=String(b.kind) as Kind;if(!['promotion','provision','password'].includes(kind))throw new SmsError(400,'批量操作无效');
+    const b=object(value);this.students.checkFields(b,['kind','resumeIds','uids']);
+    const kind=String(b.kind) as Kind;if(!['promotion','provision','password'].includes(kind))throw new SmsError(400,'批量操作无效');await this.permission(actor,kind);
     return studentLock(this.db, async()=>{
       await requireNoStudentBatch(this.db);const rows=await this.rows();let items:Item[]=[],skipped:Job['skipped']=[];let warning='';
       if(kind==='promotion'){
@@ -40,7 +41,7 @@ export class BulkService {
           try{const base=usernameBase(s.basic.name);let username=base,n=0;while(reserved.has(username)&&n<10000)username=`${base}${++n}`;if(reserved.has(username))throw Error();reserved.add(username);items.push({id:s._id,name:s.basic.name,version:s.version,username});}catch{skipped.push({id:s._id,name:s.basic.name,reason:'姓名无法生成可用用户名'});}}
       }else{
         if(!Array.isArray(b.uids)||!b.uids.length||b.uids.length>200||b.uids.some(n=>!Number.isSafeInteger(n)||n<=0)||new Set(b.uids).size!==b.uids.length)throw new SmsError(400,'请选择 1–200 个不同账号');
-        const policy=await this.students.requireAdmin(actor);
+        const policy=await this.students.policy();
         for(const uid of b.uids as number[]){const u=await this.accounts.users.findOne({_id:uid});if(!u)throw new SmsError(400,`UID ${uid} 不存在`);if(this.accounts.protected(u,policy.admins))throw new SmsError(403,`UID ${uid} 为受保护账号`);const state=await this.accounts.states.findOne({_id:uid});if(state?.pendingOperation)throw new SmsError(409,'所选账号存在未完成的批量重置');items.push({id:String(uid),uid,username:u.uname,name:rows.find(s=>s.hydroUid===uid)?.basic.name||'',version:state?.version??0});}
       }
       if(items.length>2000)throw new SmsError(400,'单批最多 2000 名学生，请先缩小待处理范围');
@@ -49,9 +50,9 @@ export class BulkService {
     });
   }
   async execute(actor: number,id: string,value:unknown){
-    await this.students.requireAdmin(actor);const b=object(value);this.students.checkFields(b,['confirmWarning','password']);
+    const b=object(value);this.students.checkFields(b,['confirmWarning','password']);
     return studentLock(this.db,async verify=>{
-      let j=await this.jobs.findOne({_id:id});if(!j||(j.status==='preview'&&j.actor!==actor))throw new SmsError(403,'批次不存在或预览不属于当前管理员');
+      let j=await this.jobs.findOne({_id:id});if(j)await this.permission(actor,j.kind);if(!j||(j.status==='preview'&&j.actor!==actor))throw new SmsError(403,'批次不存在或预览不属于当前管理员');
       if(j.status==='completed'||j.status==='undone')return this.detail(actor,id);
       if(j.status==='undoing')throw new SmsError(409,'该批次正在撤销');
       const password=j.kind==='password'?this.accounts.password(b.password):undefined;
@@ -60,13 +61,13 @@ export class BulkService {
         if(!j.items.length)throw new SmsError(400,'没有可处理的记录');if(j.warning&&b.confirmWarning!==true)throw new SmsError(400,'请勾选短期重复升年级确认');
         if(j.kind!=='password'&&(j.snapshot!==this.digest(await this.rows())||j.generation!==await this.generation()))throw new SmsError(409,'学生资料或操作记录已变化，请重新预览');
         if(j.kind==='provision'){for(const i of j.items)if(await this.accounts.users.findOne({unameLower:i.username}))throw new SmsError(409,'预览中的用户名已被占用，请重新预览');}
-        if(j.kind==='password'){const policy=await this.students.requireAdmin(actor);for(const i of j.items){const u=await this.accounts.users.findOne({_id:i.uid});const state=await this.accounts.states.findOne({_id:i.uid});if(!u||u.uname!==i.username||this.accounts.protected(u,policy.admins)||(state?.version??0)!==i.version||state?.pendingOperation)throw new SmsError(409,'账号已变化，请重新预览');}}
+        if(j.kind==='password'){const policy=await this.students.policy();for(const i of j.items){const u=await this.accounts.users.findOne({_id:i.uid});const state=await this.accounts.states.findOne({_id:i.uid});if(!u||u.uname!==i.username||this.accounts.protected(u,policy.admins)||(state?.version??0)!==i.version||state?.pendingOperation)throw new SmsError(409,'账号已变化，请重新预览');}}
         const counter=await this.db.collection<{_id:string;sequence:number}>('sms_bulk_state').findOneAndUpdate({_id:'global'},{$inc:{sequence:1}},{upsert:true,returnDocument:'after'});
         await this.students.audit(actor,`bulk.${j.kind}.start`,id,[j.kind]);await this.jobs.updateOne({_id:id,status:'preview'},{$set:{status:'running',sequence:counter!.sequence,startedAt:new Date(),lastActor:actor},$unset:{expiresAt:''}});j=(await this.jobs.findOne({_id:id}))!;
       }
       await this.jobs.updateOne({_id:id},{$set:{lastActor:actor}});
       for(let n=0;n<j.items.length;n++){
-        const i=j.items[n];if(i.done)continue;await verify();await this.students.requireAdmin(actor);
+        const i=j.items[n];if(i.done)continue;await verify();await this.permission(actor,j.kind);
         try{
           if(j.kind==='promotion'){
             const s=await this.students.students.findOne({_id:i.id});if(!s)throw new SmsError(409,'学生档案不存在');
@@ -90,7 +91,7 @@ export class BulkService {
     });
   }
   async undo(actor:number,id:string){
-    await this.students.requireAdmin(actor);return studentLock(this.db,async verify=>{
+    await this.permission(actor,'promotion');return studentLock(this.db,async verify=>{
       let j=await this.jobs.findOne({_id:id,kind:'promotion'});if(!j)throw new SmsError(404,'升年级批次不存在');if(j.status==='undone')return this.detail(actor,id);
       if(!['completed','undoing'].includes(j.status))throw new SmsError(409,'只能撤销已完成的升年级');
       if(j.status==='completed'){
@@ -99,7 +100,7 @@ export class BulkService {
         await this.students.audit(actor,'bulk.promotion.undo.start',id,['grade','status']);await this.jobs.updateOne({_id:id},{$set:{status:'undoing',undoneBy:actor}});j=(await this.jobs.findOne({_id:id}))!;
       }
       for(let n=0;n<j.items.length;n++){
-        const i=j.items[n];if(i.undone)continue;await verify();await this.students.requireAdmin(actor);const s=await this.students.students.findOne({_id:i.id});if(!s)throw new SmsError(409,'档案不存在，撤销未完成');
+        const i=j.items[n];if(i.undone)continue;await verify();await this.permission(actor,j.kind);const s=await this.students.students.findOne({_id:i.id});if(!s)throw new SmsError(409,'档案不存在，撤销未完成');
         if(s.gradeBatch!==`undo:${id}`){if((s.gradeRevision??0)!==i.expectedRevision||s.basic.grade!==i.afterGrade||s.basic.status!==i.afterStatus)throw new SmsError(409,`${i.name} 已变化，撤销未完成`);const r=await this.students.students.updateOne({_id:i.id,gradeRevision:i.expectedRevision},{$set:{'basic.grade':i.grade!,'basic.status':i.status!,gradeBatch:`undo:${id}`,updatedAt:new Date(),updatedBy:actor},$inc:{version:1,gradeRevision:1}});if(!r.matchedCount)throw new SmsError(409,'撤销存在冲突');}
         // Maintain a reverse-order undo chain, without forgiving manual edits.
         await this.jobs.updateMany({kind:'promotion',status:'completed',sequence:{$lt:j.sequence!}},{$set:{'items.$[item].expectedRevision':i.expectedRevision!+1}},{arrayFilters:[{'item.id':i.id,'item.expectedRevision':i.revision,'item.afterGrade':i.grade,'item.afterStatus':i.status}]});

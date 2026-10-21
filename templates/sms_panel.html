@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=schedule-batch-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=academic-auth-20261021">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -27,6 +27,7 @@
       <div class="section__body sms-pagination"><span id="sms-page-label" class="help-text"></span><div><button type="button" id="sms-prev" class="rounded button">上一页</button><button type="button" id="sms-next" class="rounded button">下一页</button></div></div>
     </section>
     <section id="sms-teachers-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">教师档案</h1></div><div class="section__body"><form id="sms-teacher-search" class="sms-org-toolbar"><input id="sms-teacher-query" class="textbox" type="search" placeholder="姓名、用户名、工号或 UID" aria-label="搜索教师"><select id="sms-teacher-status" class="select" aria-label="教师状态"><option value="">全部状态</option><option>在职</option><option>离职</option><option>待建档</option></select><button type="submit" class="rounded button">查询</button><button id="sms-teacher-create" type="button" class="primary rounded button" hidden>＋ 新建教师档案</button></form><p id="sms-teacher-summary" class="help-text"></p></div><div class="section__body no-padding sms-table-scroll"><table class="sms-ranking-table sms-teacher-table"><thead><tr><th>教师 / 账号</th><th>工号 / 校区</th><th>任教班级</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-teacher-rows"></tbody></table></div><div class="section__body sms-pagination"><span id="sms-teacher-page"></span><div><button id="sms-teacher-prev" type="button" class="rounded button">上一页</button><button id="sms-teacher-next" type="button" class="rounded button">下一页</button></div></div></section>
+    <section id="sms-academic-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">教务管理</h1></div><div id="sms-academic-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-courses-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">课程管理</h1></div><div id="sms-courses-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-schedules-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">排课管理</h1></div><div id="sms-schedules-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-organization-section" class="section visible" hidden>
@@ -48,8 +49,9 @@
       <div class="section__body sms-pagination"><span id="sms-rating-page"></span><div><button type="button" class="rounded button" id="sms-rating-prev">上一页</button><button type="button" class="rounded button" id="sms-rating-next">下一页</button></div></div>
     </section>
     <div id="sms-permissions-section" hidden>
+      <section class="section visible"><div class="section__header"><h1 class="section__title">模块权限</h1><div class="section__tools"><span data-sms-export="module-permissions">导出权限</span></div></div><div class="section__body" id="sms-module-permissions"></div></section>
       <section class="section visible">
-        <div class="section__header"><h1 class="section__title">访问授权</h1></div>
+        <div class="section__header"><h1 class="section__title">学生专项授权</h1></div>
         <div class="section__body">
           <form id="sms-grant-form">
             <div class="sms-form-grid"><label>Hydro UID<input class="textbox" type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>失效时间（选填，北京时间）<input class="textbox" type="datetime-local" id="sms-grant-expires"></label></div>
@@ -72,6 +74,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav active" data-tab="students"><span class="icon icon-user"></span> 学生档案</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="rating"><span class="icon icon-pie-chart" aria-hidden="true"></span> Rating</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="teachers"><span class="icon icon-user"></span> 教师档案</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="academic" id="sms-academic-nav" hidden><span class="icon icon-calendar"></span> 教务管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="courses"><span class="icon icon-book"></span> 课程管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="schedules"><span class="icon icon-schedule"></span> 排课管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="organization"><span class="icon icon-web" aria-hidden="true"></span> 班级与子域</button></li>
@@ -79,7 +82,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
     </ol></section>
-    <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">加载中…</p></div></section>
+    <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">加载中…</p><button type="button" class="link" id="sms-my-permissions">我的权限</button></div></section>
     <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.2.0</p></div></div>
   </aside>
   <dialog id="sms-student-dialog" class="section visible sms-dialog" aria-labelledby="sms-dialog-title">
@@ -96,17 +99,20 @@
     <form id="sms-account-form"><header class="section__header sms-dialog-header"><h1 id="sms-account-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-account-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-account-error" class="help-text" role="alert"></p><div id="sms-account-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-account-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-account-save">确认保存</button></div></footer></form>
   </dialog>
 </div>
-<script src="/sms-addon/exports.js?build=exports-20261021" defer></script>
-<script src="/sms-addon/panel.js?build=schedule-batch-20261021" defer></script>
-<script src="/sms-addon/organization.js?build=exports-20261021" defer></script>
-<script src="/sms-addon/accounts.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/exports.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/organization.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/accounts.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
-<script src="/sms-addon/rating.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/rating.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/teaching.css?build=timeline-teachers-20261021">
 <script src="/sms-addon/schedule-layout.js?build=timeline-teachers-20261021" defer></script>
-<script src="/sms-addon/teaching.js?build=schedule-batch-20261021" defer></script>
-<script src="/sms-addon/teachers.js?build=timeline-teachers-20261021" defer></script>
-<script src="/sms-addon/bulk.js?build=exports-20261021" defer></script>
-<script src="/sms-addon/student-import.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/teaching.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/teachers.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/bulk.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/student-import.js?build=academic-auth-20261021" defer></script>
 <script src="/sms-addon/schedule-batch.js?build=schedule-batch-20261021" defer></script>
+<link rel="stylesheet" href="/sms-addon/academic.css?build=academic-auth-20261021">
+<script src="/sms-addon/academic.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/authorization.js?build=academic-auth-20261021" defer></script>
 {% endblock %}

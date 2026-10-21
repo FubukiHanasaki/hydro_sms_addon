@@ -361,7 +361,7 @@
     $('sms-rating-next').addEventListener('click', () => { page++; board().catch(error); });
     $('sms-rating-import').addEventListener('click', () => importDialog().catch(error));
     $('sms-rating-config').addEventListener('click', () => configDialog().catch(error));
-    app.addEventListener('sms:ready', e => { me = e.detail; document.querySelector('.sms-rating-admin').hidden = !me.admin; });
+    app.addEventListener('sms:ready', e => { me = e.detail; document.querySelector('.sms-rating-admin').hidden = !me.capabilities['rating.configure']&&!me.capabilities['rating.import'];document.getElementById('sms-rating-config').hidden=!me.capabilities['rating.configure'];document.getElementById('sms-rating-import').hidden=!me.capabilities['rating.import']; });
     app.addEventListener('sms:tab', e => { if (e.detail.tab === 'rating') {
         syncFilters();
         board().catch(error);

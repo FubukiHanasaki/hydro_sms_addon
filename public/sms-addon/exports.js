@@ -30,7 +30,7 @@
 
  globalThis.SmsExport={control};
  for(const source of document.querySelectorAll('[data-sms-export]')){
-  const kind=source.dataset.smsExport;let provider=()=>{if(['audit','permissions'].includes(kind))return {};const saved=app?.dataset[`export${({students:'Students',accounts:'Accounts',classes:'Classes',rating:'Rating'})[kind]}`];return saved?JSON.parse(saved):null;};
+  const kind=source.dataset.smsExport;let provider=()=>{if(['audit','permissions','module-permissions'].includes(kind))return {};const saved=app?.dataset[`export${({students:'Students',accounts:'Accounts',classes:'Classes',rating:'Rating'})[kind]}`];return saved?JSON.parse(saved):null;};
   if(native)provider=()=>Object.fromEntries(new URLSearchParams(location.search));const wrapper=control(source.textContent,kind,provider,{sensitive:kind==='students'});if(source.hidden)wrapper.hidden=true;source.replaceWith(wrapper);
  }
 })();

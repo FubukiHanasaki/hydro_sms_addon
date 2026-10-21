@@ -22,7 +22,7 @@ export class AccountManagement {
   async init() { await this.states.createIndex({ _id: 1 }); }
   protected(user: UserDoc, admins: number[]) { return user._id <= 1 || admins.includes(user._id) || !!(user.priv & ~this.host.defaultPrivileges); }
   async list(uid: number, query: unknown, enabledValue: unknown, pageValue: unknown) {
-    const policy = await this.students.requireAdmin(uid);
+    const policy = await this.students.requireAction(uid,'accounts.read');
     const q = text(query ?? '', 80, '搜索词'); const enabled = text(enabledValue ?? '', 10, '账号状态'); const page = Number(pageValue ?? 1);
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
     if (!['', 'enabled', 'disabled'].includes(enabled)) throw new SmsError(400, '账号状态无效');
@@ -39,7 +39,7 @@ export class AccountManagement {
   username(value: unknown) { const raw = text(value, 100, '用户名'); try { return this.host.normalizeUsername(raw); } catch { throw new SmsError(400, '用户名须符合 Hydro 格式：3–31 个字符或两个汉字'); } }
   password(value: unknown) { if (typeof value !== 'string' || !/^.{6,255}$/.test(value)) throw new SmsError(400, '密码须为 6–255 个字符'); return value; }
   async create(uid: number, value: unknown) {
-    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['username', 'password', 'requestId']);
+    await this.students.requireAction(uid,'accounts.create'); const input = object(value); this.fields(input, ['username', 'password', 'requestId']);
     const username = this.username(input.username); const password = this.password(input.password); const requestId = text(input.requestId, 36, '请求标识');
     if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestId)) throw new SmsError(400, '创建账号需要有效请求标识');
     const mail = `sms-admin-${uid}-${requestId.toLowerCase()}@accounts.invalid`;
@@ -55,8 +55,9 @@ export class AccountManagement {
     });
   }
   async update(uid: number, targetValue: unknown, value: unknown, operationKey?: string) {
-    await this.students.requireAdmin(uid); const target = positiveInt(Number(targetValue)); const input = object(value);
+    const target = positiveInt(Number(targetValue)); const input = object(value);
     this.fields(input, ['action', 'username', 'password', 'enabled', 'version']);
+    await this.students.requireAction(uid,`accounts.${String(input.action)}`);
     if (!['rename', 'password', 'status'].includes(String(input.action))) throw new SmsError(400, '账号操作无效');
     if (!Number.isSafeInteger(input.version) || (input.version as number) < 0) throw new SmsError(400, '请刷新后取得有效版本');
     const username = input.action === 'rename' ? this.username(input.username) : undefined;
@@ -66,7 +67,7 @@ export class AccountManagement {
     try { await locks.findOneAndUpdate({ _id: target, expiresAt: { $lte: new Date() } }, { $set: { token, expiresAt: new Date(Date.now() + 120000) } }, { upsert: true }); }
     catch (e) { if ((e as { code?: number }).code === 11000) throw new SmsError(409, '账号正在修改，请稍后重试'); throw e; }
     try {
-      const policy = await this.students.requireAdmin(uid); const user = await this.users.findOne({ _id: target });
+      const policy = await this.students.requireAction(uid,`accounts.${String(input.action)}`); const user = await this.users.findOne({ _id: target });
       if (!user) throw new SmsError(404, '账号不存在');
       if (this.protected(user, policy.admins)) throw new SmsError(403, '内置、插件管理员或带额外 Hydro 权限的账号为受保护账号');
       const state = await this.states.findOne({ _id: target });

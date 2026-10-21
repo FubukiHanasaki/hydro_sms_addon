@@ -1,3 +1,4 @@
+import { AuthorizationService } from './authorization';
 import { studentLock, requireNoStudentBatch } from './student-lock';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Db } from 'mongodb';
@@ -8,6 +9,23 @@ import type { AccountGateway, CreatedAccount } from './accounts';
 
 export class StudentService {
   constructor(private db: Db, private accounts?: AccountGateway) {}
+  get authorization() { return new AuthorizationService(this.db); }
+  async requireAction(uid: number, code: string, classIds: string[] = []) { await this.authorization.require(uid, code, classIds); return this.policy(); }
+  async studentPolicy(uid: number, exportOnly = false): Promise<Policy> {
+    const p = await this.policy(); if (isAdmin(p, uid)) return p;
+    const grants = [...p.grants];
+    for (const code of ['students.read', 'students.write', 'students.sensitive', 'students.bind'] as const) {
+      const scope = await this.authorization.scope(uid, exportOnly && code==='students.read'?'students.export':code);
+      if (scope === null) { grants.push({uid, permissions:[code], studentIds:'all', expiresAt:null}); continue; }
+      if (!scope.length) continue;
+      const uids = await this.db.collection('domain.user').distinct('uid', {domainId:{$in:scope},join:true});
+      const rows = await this.students.find({hydroUid:{$in:uids}}, {projection:{_id:1,hydroUid:1}}).toArray();
+      const members = code==='students.read'?[]:await this.db.collection('domain.user').find({uid:{$in:uids},join:true,domainId:{$ne:'system'}}).toArray();
+      const ids=rows.filter(r=>code==='students.read'||members.filter(m=>m.uid===r.hydroUid).every(m=>scope.includes(m.domainId))).map(r=>r._id);
+      if(ids.length)grants.push({uid,permissions:[code],studentIds:ids,expiresAt:null});
+    }
+    return {...p,grants};
+  }
   get students() { return this.db.collection<Student>('sms_students'); }
   get policies() { return this.db.collection<Policy>('sms_policy'); }
   async init() {
@@ -47,13 +65,13 @@ export class StudentService {
   async me(uid: number) {
     const policy = await this.policy();
     return {
-      uid, admin: isAdmin(policy, uid), initialized: policy.admins.length > 0,
+      uid, teacher:!!await this.db.collection('sms_teachers').findOne({hydroUid:uid},{projection:{_id:1}})||(await this.authorization.teaching(uid)).length>0, ...await this.authorization.snapshot(uid), admin: isAdmin(policy, uid), initialized: policy.admins.length > 0,
       grants: activeGrant(policy, uid),
       boundStudentId: (await this.students.findOne({ hydroUid: uid }, { projection: { _id: 1 } }))?._id ?? null,
     };
   }
   async filterOptions(uid: number) {
-    const policy = await this.policy();
+    const policy = await this.studentPolicy(uid);
     const [options] = await this.students.aggregate<{
       grades: { _id: string }[]; schools: { _id: string }[]; domains: { id: string; name?: string }[];
     }>([
@@ -84,7 +102,7 @@ export class StudentService {
     };
   }
   async list(uid: number, query: unknown, pageValue: unknown, statusValue: unknown, extra: { grade?: unknown; school?: unknown; domainId?: unknown } = {}) {
-    const policy = await this.policy();
+    const policy = await this.studentPolicy(uid);
     const page = Number(pageValue ?? 1);
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
     const q = text(query ?? '', 80, '搜索词');
@@ -128,7 +146,7 @@ export class StudentService {
     return { total, page, pageSize: 20, students: rows.map((s) => ({ id: s._id, ...basicView(s.basic), hydroUid: s.hydroUid ?? null, version: s.version })) };
   }
   async detail(uid: number, id: string) {
-    const policy = await this.policy();
+    const policy = await this.studentPolicy(uid);
     const student = await this.students.findOne({ _id: id });
     if (!student || !canRead(policy, uid, student)) throw new SmsError(404, '学生档案不存在或无权查看');
     const view = visibleStudent(policy, uid, student)!;
@@ -138,7 +156,7 @@ export class StudentService {
   async byHydroUid(uid: number, targetUid: number) {
     const student = await this.students.findOne({ hydroUid: targetUid });
     if (!student) return null;
-    const view = visibleStudent(await this.policy(), uid, student);
+    const view = visibleStudent(await this.studentPolicy(uid), uid, student);
     if (view?.sensitive) await this.audit(uid, 'students.sensitive.profile', student._id);
     return view;
   }
@@ -152,7 +170,7 @@ export class StudentService {
     return studentLock(this.db, async () => { await requireNoStudentBatch(this.db); return this.createUnlocked(uid, value); });
   }
   private async createUnlocked(uid: number, value: unknown) {
-    await this.requireAdmin(uid);
+    await this.requireAction(uid, 'students.create'); await this.requireAction(uid, 'students.read'); await this.requireAction(uid, 'students.bind');
     const input = object(value);
     this.checkFields(input, ['basic', 'sensitive', 'internalNote', 'hydroUid', 'requestId']);
     const now = new Date();
@@ -161,6 +179,7 @@ export class StudentService {
       internalNote: text(input.internalNote ?? '', 3000, '内部备注'),
       version: 1, createdAt: now, updatedAt: now, createdBy: uid, updatedBy: uid,
     };
+    if (Object.values(student.sensitive).some(Boolean) || student.internalNote) await this.requireAction(uid, 'students.sensitive');
     let generatedAccount: CreatedAccount | undefined;
     if (input.hydroUid !== undefined && input.hydroUid !== null) student.hydroUid = await this.assertUser(input.hydroUid);
     else {
@@ -193,9 +212,9 @@ export class StudentService {
     if (generatedAccount) await this.db.collection('sms_account_jobs').updateOne({ _id: student._id as never }, { $set: { state: 'completed' } });
     return { ...await this.detail(uid, student._id), ...(generatedAccount ? { generatedAccount } : {}) };
   }
-  async searchUsers(uid: number, query: unknown, studentId: unknown) {
-    const policy = await this.policy();
-    if (!isAdmin(policy, uid)) {
+  async searchUsers(uid: number, query: unknown, studentId: unknown, classValue?: unknown) {
+    const policy = await this.studentPolicy(uid);const classId=text(classValue??'',64,'班级');if(classId)await this.requireAction(uid,'classes.members',[classId]);
+    if (!classId && !isAdmin(policy, uid) && !await this.authorization.can(uid,'students.bind',[]) && !(await Promise.all(['accounts.read','teachers.create','teachers.update'].map(code=>this.authorization.can(uid,code,[])))).some(Boolean)) {
       const id = text(studentId ?? '', 64, '学生 ID');
       const student = await this.students.findOne({ _id: id });
       if (!student || !canRead(policy, uid, student) || !allows(policy, uid, 'students.bind', id)) throw new SmsError(403, '没有账号绑定权限');
@@ -219,7 +238,7 @@ export class StudentService {
     const input = object(value);
     this.checkFields(input, ['version', 'basic', 'sensitive', 'internalNote', 'hydroUid']);
     const version = positiveInt(input.version, '资料版本');
-    const policy = await this.policy();
+    const policy = await this.studentPolicy(uid);
     const student = await this.students.findOne({ _id: id });
     if (!student || !canRead(policy, uid, student)) throw new SmsError(404, '学生档案不存在或无权查看');
     const $set: Partial<Student> = { updatedAt: new Date(), updatedBy: uid };
@@ -275,7 +294,7 @@ export class StudentService {
     return this.permissions(uid);
   }
   async auditList(uid: number) {
-    await this.requireAdmin(uid);
+    await this.requireAction(uid, 'audit.read');
     return this.db.collection('sms_audit').find({}, { projection: { uid: 1, action: 1, target: 1, fields: 1, at: 1, outcome: 1 } }).sort({ at: -1 }).limit(100).toArray();
   }
 }

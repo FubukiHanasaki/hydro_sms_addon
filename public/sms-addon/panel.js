@@ -18,7 +18,7 @@
   ];
   const sensitiveFields = [['birthday', '生日（年、年月或年月日）', 'text'], ['phone', '联系电话', 'tel'], ['parentName', '家长姓名'], ['parentPhone', '家长电话', 'tel'], ['wechat', '微信'], ['address', '家庭地址']];
   const permissionLabels = { 'students.read': '查看资料', 'students.sensitive': '敏感资料', 'students.write': '编辑资料', 'students.bind': '账号绑定' };
-  const actionLabels = { 'schedules.batch.start':'开始批量排课', 'schedules.batch.complete':'完成批量排课', 'schedules.batch.cancel':'放弃未发布排课', 'exports.download':'导出数据', 'students.import.start':'开始导入学生', 'students.import.complete':'完成导入学生', 'bulk.promotion.start':'开始批量升年级', 'bulk.promotion.complete':'完成批量升年级', 'bulk.promotion.undo.start':'开始撤销升年级', 'bulk.promotion.undo.complete':'完成撤销升年级', 'bulk.provision.start':'开始批量补建账号', 'bulk.provision.complete':'完成批量补建账号', 'bulk.password.start':'开始批量重置密码', 'bulk.password.complete':'完成批量重置密码', 'teachers.create': '新建教师档案', 'teachers.update': '修改教师档案', 'teachers.sensitive.read': '查看教师联系资料', 'schedules.save': '保存排课计划', 'courses.record': '登记实际课程', 'courses.link': '关联实际课程', 'courses.save': '保存课程', 'schedules.create': '批量排课', 'lessons.adjust': '调整课次', 'lessons.cancel': '停课', 'lessons.restore': '恢复课次', 'lessons.attendance': '保存教学与考勤', 'rating.import': '导入 Rating', 'rating.configure': '配置 Rating 比赛', 'rating.recalculate': '重新结算 Rating', 'accounts.create': '创建账号', 'accounts.rename': '修改用户名', 'accounts.password': '重置密码', 'accounts.status': '修改账号启用状态', 'domains.role': '修改成员身份', 'domains.create': '新建子域', 'domains.update': '修改子域', 'domains.join': '加入子域', 'domains.leave': '移出子域', 'classes.create': '新建班级', 'classes.update': '修改班级或成员', 'students.create': '新建学生', 'students.update': '修改资料', 'students.sensitive.read': '查看敏感资料', 'students.sensitive.profile': '资料页查看敏感资料', 'permissions.save': '保存授权', 'permissions.revoke': '撤销授权', 'admin.grant': '设置插件管理员', 'admin.revoke': '移除插件管理员' };
+  const actionLabels = { 'authorization.bind':'设置默认权限','authorization.template':'保存权限模板','authorization.grant':'新增模块授权','authorization.revoke':'撤销模块授权','authorization.denied':'权限拒绝', 'schedules.batch.start':'开始批量排课', 'schedules.batch.complete':'完成批量排课', 'schedules.batch.cancel':'放弃未发布排课', 'exports.download':'导出数据', 'students.import.start':'开始导入学生', 'students.import.complete':'完成导入学生', 'bulk.promotion.start':'开始批量升年级', 'bulk.promotion.complete':'完成批量升年级', 'bulk.promotion.undo.start':'开始撤销升年级', 'bulk.promotion.undo.complete':'完成撤销升年级', 'bulk.provision.start':'开始批量补建账号', 'bulk.provision.complete':'完成批量补建账号', 'bulk.password.start':'开始批量重置密码', 'bulk.password.complete':'完成批量重置密码', 'teachers.create': '新建教师档案', 'teachers.update': '修改教师档案', 'teachers.sensitive.read': '查看教师联系资料', 'schedules.save': '保存排课计划', 'courses.record': '登记实际课程', 'courses.link': '关联实际课程', 'courses.save': '保存课程', 'schedules.create': '批量排课', 'lessons.adjust': '调整课次', 'lessons.cancel': '停课', 'lessons.restore': '恢复课次', 'lessons.attendance': '保存教学与考勤', 'rating.import': '导入 Rating', 'rating.configure': '配置 Rating 比赛', 'rating.recalculate': '重新结算 Rating', 'accounts.create': '创建账号', 'accounts.rename': '修改用户名', 'accounts.password': '重置密码', 'accounts.status': '修改账号启用状态', 'domains.role': '修改成员身份', 'domains.create': '新建子域', 'domains.update': '修改子域', 'domains.join': '加入子域', 'domains.leave': '移出子域', 'classes.create': '新建班级', 'classes.update': '修改班级或成员', 'students.create': '新建学生', 'students.update': '修改资料', 'students.sensitive.read': '查看敏感资料', 'students.sensitive.profile': '资料页查看敏感资料', 'permissions.save': '保存授权', 'permissions.revoke': '撤销授权', 'admin.grant': '设置插件管理员', 'admin.revoke': '移除插件管理员' };
   function element(tag, className, content) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -289,16 +289,17 @@
     const records = await api(app.dataset.audit); const rows = $('sms-audit-rows'); rows.replaceChildren();
     for (const record of records) {
       const row = element('tr');
-      for (const content of [dateTime(record.at), record.uid ? `UID ${record.uid}` : '服务器命令', actionLabels[record.action] || record.action, record.target, ({ success: '成功', pending: '待核对', failed: '失败', unchanged: '未变更' })[record.outcome] || '已记录']) row.append(element('td', '', content));
+      for (const content of [dateTime(record.at), record.uid ? `UID ${record.uid}` : '服务器命令', actionLabels[record.action] || record.action, record.target, ({ success: '成功', pending: '待核对', failed: '失败', denied:'已拒绝', unchanged: '未变更' })[record.outcome] || '已记录']) row.append(element('td', '', content));
       rows.append(row);
     }
     if (!records.length) { const row = element('tr'); const cell = element('td', '', '暂无操作记录'); cell.colSpan = 5; row.append(cell); rows.append(row); }
   }
   async function switchTab(tab) {
+    const required={accounts:'accounts.read',academic:'reports.read',audit:'audit.read'};if(tab==='permissions'&&!state.me.admin||required[tab]&&!state.me.capabilities[required[tab]]){notice('没有此功能的访问权限',true);return;}
     state.tab = tab; notice('');
-    for (const name of ['students', 'permissions', 'audit', 'organization', 'accounts', 'rating', 'courses', 'schedules', 'teachers']) $(`sms-${name}-section`).hidden = name !== tab;
+    for (const name of ['students', 'permissions', 'audit', 'organization', 'accounts', 'rating', 'courses', 'schedules', 'teachers', 'academic']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
-    try { if (tab === 'organization' || tab === 'accounts' || tab === 'rating' || tab === 'courses' || tab === 'schedules' || tab === 'teachers') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
+    try { if (tab === 'organization' || tab === 'accounts' || tab === 'rating' || tab === 'courses' || tab === 'schedules' || tab === 'teachers' || tab === 'academic') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') {app.dispatchEvent(new CustomEvent('sms:tab',{detail:{tab,me:state.me}}));await loadPolicy();} else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
     catch (error) { notice(error.message, true); }
   }
   $('sms-search-form').addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; notice(''); loadStudents(); });
@@ -317,18 +318,21 @@
   $('sms-refresh-audit').addEventListener('click', () => loadAudit().catch((error) => notice(error.message, true)));
   document.querySelectorAll('.sms-nav').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
   window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes', 'organization'].includes(location.hash.slice(1))) switchTab('organization'); });
-  window.addEventListener('hashchange', () => { if (state.me && ['#accounts', '#rating', '#courses', '#schedules', '#teachers'].includes(location.hash)) switchTab(location.hash.slice(1)); });
+  window.addEventListener('hashchange', () => { if (state.me && ['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) switchTab(location.hash.slice(1)); });
   (async () => {
     try {
       state.me = await api(app.dataset.me);
-      $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
-      $('sms-accounts-nav').hidden = !state.me.admin;
-      $('sms-create').hidden = $('sms-permissions-nav').hidden = $('sms-audit-nav').hidden = !state.me.admin;
+      $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.templateId!=='legacy' ? state.me.templateName : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
+      $('sms-accounts-nav').hidden = !state.me.capabilities['accounts.read'];
+      document.querySelector('[data-tab=teachers]').hidden=!state.me.teacher&&!state.me.capabilities['teachers.read'];
+      $('sms-academic-nav').hidden = !state.me.capabilities['reports.read'];
+      $('sms-audit-nav').hidden = !state.me.capabilities['audit.read'];
+      $('sms-create').hidden = !state.me.capabilities['students.create'];$('sms-permissions-nav').hidden = !state.me.admin;
       if (!state.me.initialized) notice('插件尚未初始化，请由服务器维护人员指定首位插件管理员。');
       app.dispatchEvent(new CustomEvent('sms:ready', { detail: state.me }));
       await loadFilterOptions();
       await loadStudents();
-      if (['#accounts', '#rating', '#courses', '#schedules', '#teachers'].includes(location.hash)) await switchTab(location.hash.slice(1));
+      if (['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) await switchTab(location.hash.slice(1));
       if (['domains', 'classes', 'organization'].includes(location.hash.slice(1))) await switchTab('organization');
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();

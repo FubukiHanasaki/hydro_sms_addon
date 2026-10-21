@@ -15,11 +15,11 @@ export class TeachingService extends TeachingPlanner {
     const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
     const last = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).toISOString().slice(0, 10);
     const dates = range(from || `${today.slice(0, 7)}-01`, to || last);
-    const visible = await this.organization.domainList(actor), ids = visible.map(c => c._id);
+    const allowed=await this.studentService.authorization.scope(actor,'schedules.read'),visible=(await this.organization.domainList(actor)).filter(c=>allowed===null||allowed.includes(c._id)), ids = visible.map(c => c._id);
     const plans = await this.publishedPlans({ domainId: { $in: ids } });
     const metadata = await this.organization.classes.find({ domainId: { $in: ids } }).toArray();
     const memberships = await this.store.collection('domain.user').find({ domainId: { $in: ids }, join: true }).project({ domainId: 1, uid: 1 }).toArray();
-    const classes = visible.map(c => ({ id: c._id, name: c.name || c._id, teacherUids: (metadata.find(m => m.domainId === c._id)?.teacherUids ?? []).filter(uid => memberships.some(m => m.domainId === c._id && m.uid === uid)) }));
+    const classes = await Promise.all(visible.map(async c => ({canPlan:await this.studentService.authorization.can(actor,'schedules.create',[c._id]), id: c._id, name: c.name || c._id, teacherUids: (metadata.find(m => m.domainId === c._id)?.teacherUids ?? []).filter(uid => memberships.some(m => m.domainId === c._id && m.uid === uid)) })));
     const lessons = (await Promise.all(ids.map(id => this.instances(id, dates.from, dates.to)))).flat();
     const uids = [...new Set([...classes.flatMap(c => c.teacherUids), ...plans.flatMap(p => p.revisions.map(r => r.teacherUid)), ...lessons.map(l => l.teacherUid)])];
     const profiles = await this.store.collection('sms_teachers').find({ hydroUid: { $in: uids } }, { projection: { hydroUid: 1, 'basic.name': 1 } }).toArray();
@@ -27,9 +27,9 @@ export class TeachingService extends TeachingPlanner {
     if (selected && !teachers.some(t => t.uid === Number(selected))) throw new SmsError(403, '无权查看该教师的课表');
     const me = await this.studentService.me(actor);
     const className = (id: string) => classes.find(c => c.id === id)?.name || id;
-    return { period: dates, selected, teachers, classes, canPlan: me.admin,
+    return { period: dates, selected, teachers, classes, canPlan: classes.some(c=>c.canPlan), canBatch: await this.studentService.authorization.can(actor,'schedules.batch',[]),
       lessons: lessons.filter(l => !selected || l.teacherUid === Number(selected)).map(l => ({ ...l, className: className(l.domainId) })).sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`)),
-      plans: plans.filter(p => !selected || p.revisions.at(-1)!.teacherUid === Number(selected)).map(p => ({ id: p._id, domainId: p.domainId, className: className(p.domainId), version: p.version, ...p.revisions.at(-1)! })) };
+      plans: await Promise.all(plans.filter(p => !selected || p.revisions.at(-1)!.teacherUid === Number(selected)).map(async p => ({canEdit:await this.studentService.authorization.can(actor,'schedules.update',[p.domainId]), id: p._id, domainId: p.domainId, className: className(p.domainId), version: p.version, ...p.revisions.at(-1)! }))) };
   }
   async overview(actor: number, id: string, from?: unknown, to?: unknown) {
     const ctx = await this.context(actor, id), domainId = ctx.domain._id;
@@ -37,12 +37,13 @@ export class TeachingService extends TeachingPlanner {
     const last = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).toISOString().slice(0, 10);
     const period = range(from || `${month}-01`, to || last, 92);
     const detail = await this.organization.classDetail(actor, domainId);
-    const plans = await this.publishedPlans({ domainId });
-    const rawCourses = await this.records.find({ domainId, date: { $gte: period.from, $lte: period.to } }).sort({ date: -1, start: -1 }).toArray();
+    const courseRead=await this.studentService.authorization.can(actor,'courses.read',[domainId]),scheduleRead=await this.studentService.authorization.can(actor,'schedules.read',[domainId]);
+    const plans = scheduleRead?await this.publishedPlans({ domainId }):[];
+    const rawCourses = courseRead?await this.records.find({ domainId, date: { $gte: period.from, $lte: period.to } }).sort({ date: -1, start: -1 }).toArray():[];
     const courses = rawCourses.map(({ updatedBy, requestHash, ...c }) => ({ ...c, attendance: c.attendance.filter(a => ctx.staff || a.uid === actor) }));
-    const lessons = await this.instances(domainId, period.from, period.to);
+    const lessons = scheduleRead?await this.instances(domainId, period.from, period.to):[];
     const linkedIds = lessons.map(l => l.courseId).filter((id): id is string => !!id && !courses.some(c => c._id === id));
-    const linkedCourses = (await this.records.find({ domainId, _id: { $in: linkedIds } }).toArray()).map(({ updatedBy, requestHash, ...c }) => ({ ...c, attendance: c.attendance.filter(a => ctx.staff || a.uid === actor) }));
+    const linkedCourses = (courseRead?await this.records.find({ domainId, _id: { $in: linkedIds } }).toArray():[]).map(({ updatedBy, requestHash, ...c }) => ({ ...c, attendance: c.attendance.filter(a => ctx.staff || a.uid === actor) }));
     const studentUids = detail.students.map(s => s.hydroUid!).filter(Boolean), heads = await this.rating.head();
     const summaries = await this.rating.summaries.find({ generation: heads.generation, uid: { $in: studentUids } }).toArray();
     const at = { $gte: new Date(`${period.from}T00:00:00+08:00`).toISOString(), $lte: new Date(`${period.to}T23:59:59.999+08:00`).toISOString() };
@@ -64,6 +65,7 @@ export class TeachingService extends TeachingPlanner {
     for (const c of courses) for (const a of c.attendance) { const key = ({ '到课': 'present', '迟到': 'late', '请假': 'leave', '旷课': 'absent', '': 'pending' } as const)[a.status as typeof ATTENDANCE[number]]; if (key) counts[key]++; if (a.status) counts.recorded++; }
     const attendanceStudents = detail.students.map(s => { const rows = courses.flatMap(c => c.attendance.filter(a => a.uid === s.hydroUid)); return { uid: s.hydroUid, name: s.name, present: rows.filter(a => a.status === '到课').length, late: rows.filter(a => a.status === '迟到').length, leave: rows.filter(a => a.status === '请假').length, absent: rows.filter(a => a.status === '旷课').length, recorded: rows.filter(a => a.status).length }; });
     const board = detail.students.map(s => { const summary = summaries.find(r => r.uid === s.hydroUid), history = changes.filter(c => c.uid === s.hydroUid); return { uid: s.hydroUid, name: s.name, ...this.rating.present(summary ?? null), periodDelta: Math.round(history.reduce((n, c) => n + c.delta, 0) * 100) / 100 }; }).sort((a, b) => b.rating - a.rating);
-    return { class: detail, period, canPlan: ctx.me.admin, canTeach: ctx.staff, courses, linkedCourses, plans: plans.map(p => ({ id: p._id, version: p.version, ...p.revisions.at(-1)! })), lessons, attendance: { ...counts, rate: counts.recorded ? Math.round((counts.present + counts.late) / counts.recorded * 10000) / 100 : null, students: attendanceStudents }, rating: { rated: summaries.length, average: summaries.length ? Math.round(summaries.reduce((n, s) => n + s.rating, 0) / summaries.length * 100) / 100 : 0, board, trend, timeline }, contests: docs.map(d => ({ id: String(d.docId), title: d.title, beginAt: d.beginAt, endAt: d.endAt, rule: d.rule, settled: sources.some(s => s.contestId === String(d.docId) && s.domainId === domainId), url: `/d/${encodeURIComponent(domainId)}/contest/${String(d.docId)}` })) };
+    const capabilities=Object.fromEntries(await Promise.all(['schedules.create','schedules.update','schedules.adjust','courses.create','courses.update','courses.link','courses.roster'].map(async code=>[code,await this.studentService.authorization.can(actor,code,[domainId])])));
+    return { class: detail, period, staff:ctx.staff, capabilities, canPlan:capabilities['schedules.create'], canTeach:capabilities['courses.create']||capabilities['courses.update'], courses, linkedCourses, plans: plans.map(p => ({ id: p._id, version: p.version, ...p.revisions.at(-1)! })), lessons, attendance: { ...counts, rate: counts.recorded ? Math.round((counts.present + counts.late) / counts.recorded * 10000) / 100 : null, students: attendanceStudents }, rating: { rated: summaries.length, average: summaries.length ? Math.round(summaries.reduce((n, s) => n + s.rating, 0) / summaries.length * 100) / 100 : 0, board, trend, timeline }, contests: docs.map(d => ({ id: String(d.docId), title: d.title, beginAt: d.beginAt, endAt: d.endAt, rule: d.rule, settled: sources.some(s => s.contestId === String(d.docId) && s.domainId === domainId), url: `/d/${encodeURIComponent(domainId)}/contest/${String(d.docId)}` })) };
   }
 }

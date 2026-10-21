@@ -16,14 +16,15 @@ const keyFor=(id:string,row:number)=>hash(['student-import',id,row]).slice(0,32)
 export class StudentImportService {
   constructor(private db:Db,private students:StudentService,private accounts:AccountManagement,private provisioner:AccountGateway){}
   get jobs(){return this.db.collection<ImportJob>('sms_student_imports');}
-  async init(){await this.jobs.createIndex({createdAt:-1});await this.jobs.createIndex({expiresAt:1},{expireAfterSeconds:0});}
-  async parse(actor:number,value:unknown){await this.students.requireAdmin(actor);return parseStudentFile(value);}
+  async importPermission(actor:number){for(const code of ['students.import','students.create','students.write','students.bind','students.read'])await this.students.requireAction(actor,code);return this.students.policy();}
+ async init(){await this.jobs.createIndex({createdAt:-1});await this.jobs.createIndex({expiresAt:1},{expireAfterSeconds:0});}
+  async parse(actor:number,value:unknown){await this.importPermission(actor);return parseStudentFile(value);}
   async snapshot(){const s=await this.students.students.find({},{projection:{basic:1,hydroUid:1,version:1}}).sort({_id:1}).toArray();return {rows:s,digest:hash(s.map(s=>[s._id,s.basic,s.hydroUid??null,s.version]))};}
   view(j:ImportJob,detail=false){return {id:j._id,actor:j.actor,lastActor:j.lastActor,filename:j.filename,status:j.status,createdAt:j.createdAt,startedAt:j.startedAt,completedAt:j.completedAt,total:j.items.length,selected:j.items.filter(i=>i.selected).length,done:j.items.filter(i=>i.done).length,counts:Object.fromEntries(['create','bind','duplicate','suspect','error'].map(k=>[k,j.items.filter(i=>i.kind===k).length])),...(detail?{items:j.items}:{})};}
-  async history(actor:number){await this.students.requireAdmin(actor);return (await this.jobs.find({status:{$ne:'preview'}}).sort({createdAt:-1}).limit(100).toArray()).map(j=>this.view(j));}
-  async detail(actor:number,id:string){await this.students.requireAdmin(actor);const j=await this.jobs.findOne({_id:id});if(!j)throw new SmsError(404,'导入批次不存在');if(j.status==='preview'&&j.actor!==actor)throw new SmsError(403,'预览不属于当前管理员');return this.view(j,true);}
+  async history(actor:number){await this.importPermission(actor);return (await this.jobs.find({status:{$ne:'preview'}}).sort({createdAt:-1}).limit(100).toArray()).map(j=>this.view(j));}
+  async detail(actor:number,id:string){await this.importPermission(actor);const j=await this.jobs.findOne({_id:id});if(!j)throw new SmsError(404,'导入批次不存在');if(j.status==='preview'&&j.actor!==actor)throw new SmsError(403,'预览不属于当前管理员');return this.view(j,true);}
   async preview(actor:number,value:unknown){
-    const policy=await this.students.requireAdmin(actor),b=object(value);this.students.checkFields(b,['filename','headers','rows','mapping','allowNewRows','skipRows']);
+    const policy=await this.importPermission(actor),b=object(value);this.students.checkFields(b,['filename','headers','rows','mapping','allowNewRows','skipRows']);
     const filename=text(b.filename,160,'文件名');if(!Array.isArray(b.headers)||!b.headers.length||b.headers.length>50||b.headers.some(h=>typeof h!=='string'||h.length>100))throw new SmsError(400,'表头无效');
     const headers=b.headers as string[],mapping=object(b.mapping);if(Object.keys(mapping).some(k=>!Object.hasOwn(IMPORT_FIELDS,k))||Object.values(mapping).some(n=>!Number.isInteger(n)||(n as number)<0||(n as number)>=headers.length)||new Set(Object.values(mapping)).size!==Object.values(mapping).length||mapping.name===undefined)throw new SmsError(400,'请将姓名及其他字段分别对应到有效列');
     if(!Array.isArray(b.rows)||!b.rows.length||b.rows.length>1000)throw new SmsError(400,'每次导入 1–1000 行');
@@ -70,24 +71,24 @@ export class StudentImportService {
     });
   }
   async execute(actor:number,id:string){
-    await this.students.requireAdmin(actor);return studentLock(this.db,async verify=>{
+    await this.importPermission(actor);return studentLock(this.db,async verify=>{
       let j=await this.jobs.findOne({_id:id});if(!j||(j.status==='preview'&&j.actor!==actor))throw new SmsError(403,'批次不存在或预览不属于当前管理员');if(j.status==='completed')return this.detail(actor,id);
       if(j.status==='preview'){
         await requireNoStudentBatch(this.db);if(Date.now()<j.createdAt.getTime()||Date.now()-j.createdAt.getTime()>15*60000)throw new SmsError(409,'预览已过期，请重新预览');
         if(!j.items.some(i=>i.selected))throw new SmsError(400,'没有选择可导入的记录');if((await this.snapshot()).digest!==j.snapshot)throw new SmsError(409,'学生档案已变化，请重新预览');
-        const policy=await this.students.requireAdmin(actor);
+        const policy=await this.importPermission(actor);
         for(const i of j.items.filter(i=>i.selected)){if(i.hydroUid){const u=await this.accounts.users.findOne({_id:i.hydroUid});if(!u||u.uname!==i.username||this.accounts.protected(u,policy.admins))throw new SmsError(409,'待绑定账号已变化，请重新预览');}else if(await this.accounts.users.findOne({unameLower:i.username}))throw new SmsError(409,'用户名已被占用，请重新预览');}
         await this.students.audit(actor,'students.import.start',id,['basic','hydroUid']);await this.jobs.updateOne({_id:id,status:'preview'},{$set:{status:'running',startedAt:new Date(),lastActor:actor},$unset:{expiresAt:''}});j=(await this.jobs.findOne({_id:id}))!;
       }
       for(let n=0;n<j.items.length;n++){
-        const i=j.items[n];if(!i.selected||i.done)continue;await verify();await this.students.requireAdmin(actor);
+        const i=j.items[n];if(!i.selected||i.done)continue;await verify();await this.importPermission(actor);
         try{
           const key=keyFor(id,i.row),studentId=i.targetId||`import_${key}`;
           const current=await this.students.students.findOne({_id:studentId});
           if(i.targetId&&(!current||current.version!==i.targetVersion&&!((current as Student&{importBatch?:string}).importBatch===id)))throw new SmsError(409,'已有档案已变化');
           let uid=i.hydroUid,username=i.username;
           if(!uid){const account=await this.provisioner.provision(i.basic.name,key,i.username);uid=account.uid;username=account.username;}
-          else{const policy=await this.students.requireAdmin(actor),user=await this.accounts.users.findOne({_id:uid});if(!user||this.accounts.protected(user,policy.admins)||user.uname!==username)throw new SmsError(409,'待绑定账号已变化');}
+          else{const policy=await this.importPermission(actor),user=await this.accounts.users.findOne({_id:uid});if(!user||this.accounts.protected(user,policy.admins)||user.uname!==username)throw new SmsError(409,'待绑定账号已变化');}
           const owner=await this.students.students.findOne({hydroUid:uid});if(owner&&owner._id!==studentId)throw new SmsError(409,'账号已绑定其他学生');
           if(i.targetId){
             if(current?.hydroUid&&current.hydroUid!==uid)throw new SmsError(409,'已有档案已绑定其他账号');
