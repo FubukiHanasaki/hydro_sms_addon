@@ -248,9 +248,9 @@ export class RatingService {
             throw new SmsError(404, '账号不存在');
         const h = await this.head(), filter = { generation: h.generation, uid }, summary = await this.summaries.findOne(filter), total = await this.changes.countDocuments(filter);
         const rows = await this.changes.find(filter).sort({ at: -1, order: -1 }).skip((page - 1) * 20).limit(20).toArray();
-        const trend = await this.changes.find(filter).sort({ at: 1, order: 1 }).project({ at: 1, after: 1 }).toArray();
+        const trend = await this.changes.find(filter).sort({ at: 1, order: 1 }).project({ at: 1, after: 1, delta: 1, title: 1, rank: 1, participants: 1 }).toArray();
         const recent = await this.changes.find({ ...filter, at: { $gte: new Date(Date.now() - 30 * 86400000).toISOString() } }).toArray();
-        return { uid, username: user.uname, ...this.present(summary), recent: changeBucket(recent), total, page, pageSize: 20, history: rows.map(({ _id, generation, ...c }) => c), trend: trend.map(c => ({ at: c.at, rating: c.after })) };
+        return { uid, username: user.uname, tierBands: TITLES.map(({ min, title, key }) => ({ min, title, key })), ...this.present(summary), recent: changeBucket(recent), total, page, pageSize: 20, history: rows.map(({ _id, generation, ...c }) => c), trend: trend.map(c => ({ at: c.at, rating: c.after, delta: c.delta, title: c.title, rank: c.rank, participants: c.participants })) };
     }
     async board(domainId: string, query: unknown = '', pageValue: unknown = 1, mode: unknown = 'all', gradeValue: unknown = '', schoolValue: unknown = '') {
         const q = text(query ?? '', 80, '搜索词'), grade = text(gradeValue ?? '', 160, '年级'), school = text(schoolValue ?? '', 160, '学校'), page = positiveInt(Number(pageValue), '页码');

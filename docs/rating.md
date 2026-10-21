@@ -8,7 +8,7 @@
 - `src/rating-engine.ts`：`RatingEngine` 接口和默认 `legacySmsRatingEngine`。输入为参赛成绩、只读用户状态、难度和是否按罚时打破同分；输出为每人的前后分数、涨跌、排名、人数、有效系数和累计参赛次数。
 - `src/rating.ts`：鉴权、历史记录导入、按时间重放、分数投影、不可变数据批次、排行榜和历史接口。通过构造参数注入引擎，不承担公式计算。
 - `src/rating-hydro.ts`：将 Hydro 官方比赛成绩表转换成引擎输入，适配原版排行榜、主页榜单、用户名徽章、原版 RP 定时任务与比赛事件。
-- `public/sms-addon/rating.js` / `rating.css`：页面、历史曲线、导入预览与比赛设置。
+- `public/sms-addon/rating.js` / `rating.css`：页面、分段色带历史曲线、悬停／触屏／键盘详情、导入预览与比赛设置。`profile.js` 只管理用户资料页的即时标签切换，支持方向键和地址哈希恢复，不调用 Hydro 的滑动控制器。
 
 升级时实现一个新的 `RatingEngine`，为其设置新的 `id`，再传入 `RatingService` 的第五个参数。引擎 ID 是算法实现标识，不是插件版本号；插件版本仍仅在用户要求时更改。结算结果的头记录保存引擎 ID；配置中存在比赛时，后续重算会在引擎 ID 改变后重放，即使比赛输入未变。运行时统一切换新引擎后，调用重新结算；不要混用不同引擎的工作进程。
 
@@ -82,3 +82,5 @@ uid,rating,recordedAt
 读接口：`GET /sms/api/rating/board?mode=all|recent&page=1&q=&grade=&school=&classId=`、`GET /sms/api/rating/users/<uid>?page=1`。当前域成员范围由 Hydro 子域路径确定；列表只发布账号公开标识、分数与排名。写接口另有 `POST /sms/api/rating/contests` 与 `POST /sms/api/rating/recalculate`，均限定插件管理员并执行同源校验。
 
 排行榜支持按班级筛选：`classId` 使用“班级与子域”的子域 ID。班级选项直接来自共享管理名单，不依赖学生是否建档；只列出当前用户可访问的班级。总榜、进步榜和翻页均保留所选班级，数据概览也按筛选结果统计。
+
+用户资料页的 Rating 位于“个人简介”，不再创建单独标签；已有个人简介内容保留。曲线参考 Codeforces 的等级背景色带、细折线与节点样式，分数区间和头衔仍使用插件原有规则。简介、最近活动、题解和学生资料均即时切换，不使用横向滑动动画。

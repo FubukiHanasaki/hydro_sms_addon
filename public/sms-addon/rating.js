@@ -54,43 +54,86 @@
         return { d, body, footer, left, right, error: err };
     }
     function table(headers, cls = '') { const wrapper = el('div', 'sms-table-scroll'), t = el('table', `data-table ${cls}`), head = el('thead'), tr = el('tr'), body = el('tbody'), cols = el('colgroup'); const widths = headers.length === 2 ? [75, 25] : cls === 'sms-rating-history-table' ? [34, 12, 24, 14, 16] : cls === 'sms-rating-config-table' ? [32, 18, 15, 20, 15] : [20, 25, 55]; widths.forEach(w => { const col = el('col'); col.style.width = w + '%'; cols.append(col); }); t.append(cols); headers.forEach(h => tr.append(el('th', '', h))); head.append(tr); t.append(head, body); wrapper.append(t); return { wrapper, body }; }
-    function chart(root, points) {
+    function chart(root, points, bands = root.smsBands || []) {
         root.replaceChildren();
-        root.classList.add('sms-rating-chart');
-        root.smsPoints = points;
-        const width = Math.max(320, Math.min(760, root.clientWidth || 760)), right = width - 18;
+        root.classList.add('sms-rating-chart', 'sms-cf-chart');
+        root.smsPoints = points; root.smsBands = bands;
+        const width = Math.max(280, Math.min(880, root.clientWidth || 760));
         root.smsChartWidth = width;
         if (!root.smsResize && typeof ResizeObserver !== 'undefined') {
             root.smsResize = new ResizeObserver(() => {
-                if (root.clientWidth && Math.max(320, Math.min(760, root.clientWidth)) !== root.smsChartWidth) chart(root, root.smsPoints);
+                if (root.clientWidth && Math.max(280, Math.min(880, root.clientWidth)) !== root.smsChartWidth) chart(root, root.smsPoints);
             });
             root.smsResize.observe(root);
         }
-        if (!points.length) {
-            root.append(el('p', 'sms-rating-chart-empty', '暂无 Rating 记录'));
-            return;
-        }
+        if (!points.length) { root.append(el('p', 'sms-rating-chart-empty', '暂无 Rating 记录')); return; }
         const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
-        svg.setAttribute('viewBox', `0 0 ${width} 240`);
-        svg.setAttribute('role', 'img');
-        svg.setAttribute('aria-label', 'Rating 历史曲线');
-        const append = (tag, attrs, text) => { const n = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs))
-            n.setAttribute(k, String(v)); if (text !== undefined)
-            n.textContent = String(text); svg.append(n); return n; };
-        const values = points.map(p => p.rating), min = Math.min(...values), max = Math.max(...values), padding = Math.max(20, (max - min) * .12), lo = Math.max(0, min - padding), hi = max + padding;
-        const start = +new Date(points[0].at), end = +new Date(points[points.length - 1].at), x = p => end === start ? (58 + right) / 2 : 58 + (+new Date(p.at) - start) / (end - start) * (right - 58), y = p => 202 - (p.rating - lo) / Math.max(1, hi - lo) * 178;
-        for (let i = 0; i < 4; i++) {
-            const yy = 24 + i * 178 / 3;
-            append('line', { x1: 58, x2: right, y1: yy, y2: yy, class: 'sms-chart-grid' });
-            append('text', { x: 48, y: yy + 4, 'text-anchor': 'end' }, number(hi - (hi - lo) * i / 3));
+        const height = width < 500 ? 270 : 300, left = 52, right = width - 16, top = 18, bottom = height - 34;
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`); svg.setAttribute('role', 'img'); svg.setAttribute('tabindex', '0');
+        svg.setAttribute('aria-label', 'Rating 历史曲线，可用左右方向键查看记录');
+        const append = (tag, attrs, text) => { const node = document.createElementNS(ns, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value)); if (text !== undefined) node.textContent = String(text); svg.append(node); return node; };
+        const low = points.reduce((v, p) => Math.min(v, p.rating), Infinity), high = points.reduce((v, p) => Math.max(v, p.rating), -Infinity), lo = Math.max(0, Math.floor((low - 100) / 100) * 100), hi = Math.max(lo + 400, Math.ceil((high + 100) / 100) * 100);
+        const start = +new Date(points[0].at), end = +new Date(points[points.length - 1].at);
+        const x = p => end === start ? (left + right) / 2 : left + (+new Date(p.at) - start) / (end - start) * (right - left);
+        const y = rating => bottom - (rating - lo) / (hi - lo) * (bottom - top);
+        const tiers = [...bands].sort((a, b) => a.min - b.min);
+        tiers.forEach((band, index) => {
+            const lower = Math.max(lo, band.min), upper = Math.min(hi, tiers[index + 1]?.min ?? hi);
+            if (upper <= lower) return;
+            append('rect', { x: left, y: y(upper), width: right - left, height: y(lower) - y(upper), class: `sms-rating-band sms-band-${band.key}`, 'aria-hidden': 'true' });
+            if (y(lower) - y(upper) >= 24 && width >= 600) append('text', { x: right - 7, y: y(upper) + 16, 'text-anchor': 'end', class: 'sms-band-label', 'aria-hidden': 'true' }, band.title);
+        });
+        const step = (hi - lo) / 4;
+        for (let i = 0; i <= 4; i++) {
+            const value = lo + i * step, yy = y(value);
+            append('line', { x1: left, x2: right, y1: yy, y2: yy, class: 'sms-chart-grid' });
+            append('text', { x: left - 8, y: yy + 4, 'text-anchor': 'end' }, number(value));
         }
-        append('text', { x: 58, y: 230 }, new Date(points[0].at).toLocaleDateString('zh-CN'));
-        append('text', { x: right, y: 230, 'text-anchor': 'end' }, new Date(points[points.length - 1].at).toLocaleDateString('zh-CN'));
-        append('path', { d: points.map((p, i) => `${i ? 'L' : 'M'}${x(p).toFixed(2)},${y(p).toFixed(2)}`).join(' '), class: 'sms-chart-line' });
-        // Keyboard-focusable samples and the table expose exact dates and values.
-        points.forEach((p, i) => { if (points.length > 100 && i % Math.ceil(points.length / 100) !== 0 && i !== points.length - 1)
-            return; const c = append('circle', { cx: x(p), cy: y(p), r: 3.5, tabindex: 0, 'aria-label': `${date(p.at)}，Rating ${number(p.rating)}` }), title = document.createElementNS(ns, 'title'); title.textContent = `${date(p.at)} · ${number(p.rating)}`; c.append(title); });
-        root.append(svg);
+        append('line', { x1: left, x2: left, y1: top, y2: bottom, class: 'sms-chart-axis' });
+        append('line', { x1: left, x2: right, y1: bottom, y2: bottom, class: 'sms-chart-axis' });
+        const shortDate = t => new Date(t).toLocaleDateString('zh-CN');
+        if (start === end) append('text', { x: (left + right) / 2, y: height - 9, 'text-anchor': 'middle' }, shortDate(start));
+        else {
+            append('text', { x: left, y: height - 9 }, shortDate(start));
+            if (width >= 600) append('text', { x: (left + right) / 2, y: height - 9, 'text-anchor': 'middle' }, shortDate((start + end) / 2));
+            append('text', { x: right, y: height - 9, 'text-anchor': 'end' }, shortDate(end));
+        }
+        append('path', { d: points.map((p, i) => `${i ? 'L' : 'M'}${x(p).toFixed(2)},${y(p.rating).toFixed(2)}`).join(' '), class: 'sms-chart-line' });
+        points.forEach((p, i) => {
+            if (points.length > 200 && i % Math.ceil(points.length / 200) && i !== points.length - 1) return;
+            const dot = append('circle', { cx: x(p), cy: y(p.rating), r: 2.7, class: 'sms-chart-point' }), title = document.createElementNS(ns, 'title');
+            title.textContent = `${p.title || 'Rating'} · ${date(p.at)} · ${number(p.rating)}`; dot.append(title);
+        });
+        const marker = append('circle', { r: 5, class: 'sms-chart-selected', visibility: 'hidden', 'aria-hidden': 'true' });
+        const detail = el('div', 'sms-rating-point-detail'); detail.hidden = true; detail.setAttribute('role', 'status'); detail.setAttribute('aria-live', 'polite');
+        let selected = points.length - 1;
+        function show(index) {
+            selected = Math.max(0, Math.min(points.length - 1, index)); const p = points[selected];
+            const delta = p.delta ?? (selected ? p.rating - points[selected - 1].rating : 0);
+            detail.replaceChildren(el('strong', '', p.title || 'Rating 记录'), el('span', '', date(p.at)), el('span', '', `Rating ${number(p.rating)}（${signed(delta)}）`));
+            if (p.rank) detail.append(el('span', '', `排名 ${p.rank} / ${p.participants}`));
+            marker.setAttribute('cx', x(p)); marker.setAttribute('cy', y(p.rating)); marker.setAttribute('visibility', 'visible'); detail.hidden = false;
+            const scale = svg.getBoundingClientRect().width / width;
+            detail.style.left = `${Math.max(6, Math.min(root.clientWidth - detail.offsetWidth - 6, x(p) * scale + 12))}px`;
+            detail.style.top = `${Math.max(6, Math.min(svg.getBoundingClientRect().height - detail.offsetHeight - 6, y(p.rating) * scale + 12))}px`;
+        }
+        function nearest(event) {
+            const rect = svg.getBoundingClientRect(), px = (event.clientX - rect.left) / rect.width * width;
+            let a = 0, b = points.length - 1;
+            while (a < b) { const mid = Math.floor((a + b) / 2); if (x(points[mid]) < px) a = mid + 1; else b = mid; }
+            return a > 0 && Math.abs(x(points[a - 1]) - px) < Math.abs(x(points[a]) - px) ? a - 1 : a;
+        }
+        svg.addEventListener('pointermove', event => show(nearest(event)));
+        svg.addEventListener('pointerleave', () => { if (document.activeElement !== svg) { detail.hidden = true; marker.setAttribute('visibility', 'hidden'); } });
+        svg.addEventListener('click', event => { show(nearest(event)); svg.focus({ preventScroll: true }); });
+        svg.addEventListener('focus', () => show(selected));
+        svg.addEventListener('blur', () => { detail.hidden = true; marker.setAttribute('visibility', 'hidden'); });
+        svg.addEventListener('keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+            event.preventDefault(); if (event.key === 'Escape') { detail.hidden = true; marker.setAttribute('visibility', 'hidden'); return; }
+            show(event.key === 'Home' ? 0 : event.key === 'End' ? points.length - 1 : selected + (event.key === 'ArrowRight' ? 1 : -1));
+        });
+        root.append(svg, detail);
     }
     async function history(uid, base) {
         const view = dialog('Rating 历史'), metrics = el('div', 'sms-rating-metrics'), range = el('div', 'sms-rating-range'), plot = el('div'), details = table(['时间 / 来源', '难度', 'Rating', '变化', '排名'], 'sms-rating-history-table');
@@ -109,7 +152,7 @@
                 block.append(el('span', '', label), el('strong', label === '头衔' ? 'sms-rating-tier-value' : '', value));
                 metrics.append(block);
             }
-            const draw = () => chart(plot, period === 'all' ? data.trend : data.trend.filter(p => +new Date(p.at) >= Date.now() - 30 * 86400000));
+            const draw = () => chart(plot, period === 'all' ? data.trend : data.trend.filter(p => +new Date(p.at) >= Date.now() - 30 * 86400000), data.tierBands);
             range.replaceChildren();
             for (const [key, label] of [['all', '全部记录'], ['recent', '近 30 天']]) {
                 const b = button(label, () => { period = key; for (const e of range.children)
@@ -149,7 +192,7 @@
         const base = profile.dataset.api.replace(/\/\d+$/, '');
         profile.querySelector('.sms-profile-history')?.addEventListener('click', () => history(profile.dataset.smsProfileRating, base).catch(error));
         if (profile.querySelector('.sms-profile-history'))
-            api(profile.dataset.api).then(data => chart(profile.querySelector('.sms-profile-chart'), data.trend)).catch(e => { profile.querySelector('.sms-profile-chart').textContent = e.message; });
+            api(profile.dataset.api).then(data => chart(profile.querySelector('.sms-profile-chart'), data.trend, data.tierBands)).catch(e => { profile.querySelector('.sms-profile-chart').textContent = e.message; });
     }
     if (!app)
         return;

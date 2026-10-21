@@ -1,0 +1,5 @@
+<section class="section__body sms-profile-rating" data-sms-profile-rating="{{ udoc._id }}" data-api="{{ url('sms_api_rating_history', uid=udoc._id) }}">
+  <div class="sms-profile-rating-header"><h2>Rating</h2>{% if handler.user._id %}<button type="button" class="rounded button sms-profile-history">历史记录</button>{% endif %}</div>
+  <div class="sms-rating-metrics"><div><span>当前 Rating</span><strong>{{ udoc.smsRating.rating|default(0) }}</strong></div><div><span>头衔</span><strong class="sms-rating-tier-value" style="color:{{ udoc.smsRating.color|default('#777777') }}">{{ udoc.smsRating.title|default('未评级') }}</strong></div><div><span>最高 Rating</span><strong>{{ udoc.smsRating.peak|default(0) }}</strong></div></div>
+  <div class="sms-profile-chart"></div>
+</section>
