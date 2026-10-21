@@ -62,7 +62,7 @@ export class ExportService {
   if(kind==='import-accounts'||kind==='import-result'){
    const j=await this.imports.detail(actor,text(q.id,100,'批次 ID'));const items=j.items!;
    if(kind==='import-accounts')return {name:'导入学生账号',headers:['姓名','UID','用户名','初始密码'],rows:items.filter(i=>i.done).map(i=>[i.basic.name,i.hydroUid,i.username,i.accountCreated?i.username:''])};
-   return {name:'学生导入结果',headers:['文件行','姓名','年级','学校','学生状态','UID','用户名','识别结果','选择导入','执行结果','原因'],rows:items.map(i=>[i.row,i.basic.name,i.basic.grade,i.basic.school,i.basic.status,i.hydroUid,i.username,({create:'新增',bind:'绑定已有档案',duplicate:'重复',suspect:'疑似重复',error:'错误'}as Record<string,string>)[i.kind]||i.kind,i.selected?'是':'否',i.done?'已完成':'未执行',i.error||i.reason])};
+   return {name:'学生导入结果',headers:['文件行','姓名','年级','学校','学生状态','UID','用户名','识别结果','选择导入','执行结果','原因','Rating','Rating结算时间','Rating执行状态'],rows:items.map(i=>[i.row,i.basic.name,i.basic.grade,i.basic.school,i.basic.status,i.hydroUid,i.username,({create:'新增',bind:'绑定已有档案',duplicate:'重复',suspect:'疑似重复',error:'错误',skip:'跳过'}as Record<string,string>)[i.kind]||i.kind,i.selected?'是':'否',i.done?'已完成':i.profileDone?'资料已准备，Rating待处理':'未执行',i.error||i.reason,i.rating?.rating,i.rating?at(i.rating.recordedAt):'',i.rating?i.ratingDone?'已完成':i.selected?'待导入':'未选择':''])};
   }
   if(kind==='schedule-batch-result'||kind==='schedule-batch-conflicts'){
    if(!this.batches)throw new SmsError(400,'批量排课不可用');const j=await this.batches.detail(actor,text(q.id,100,'批次 ID'));

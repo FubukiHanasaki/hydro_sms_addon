@@ -3,8 +3,8 @@ import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
 import { SmsError } from './types';
 import { object, text } from './validation';
-export const IMPORT_FIELDS = { name: '姓名', gender: '性别', grade: '年级', school: '学校', status: '学生状态', enrollmentDate: '入学日期', currentStage: '学习阶段', hydroUid: 'Hydro UID' };
-const aliases: Record<string, string[]> = { name:['姓名','学生姓名','学生','name'], gender:['性别','gender','sex'], grade:['年级','grade'],school:['学校','所在学校','school'],status:['学生状态','状态','学籍状态','status'],enrollmentDate:['入学日期','入学时间','enrollmentDate','enrollment_date'],currentStage:['学习阶段','当前阶段','currentStage','current_stage'],hydroUid:['Hydro UID','HydroUID','UID','hydroUid','hydro_uid'] };
+export const IMPORT_FIELDS = { name: '姓名', gender: '性别', grade: '年级', school: '学校', status: '学生状态', enrollmentDate: '入学日期', currentStage: '学习阶段', hydroUid: 'Hydro UID', rating: 'Rating', ratingRecordedAt: 'Rating结算时间', accountMode: '账号处理' };
+const aliases: Record<string, string[]> = { name:['姓名','学生姓名','学生','name'], gender:['性别','gender','sex'], grade:['年级','grade'],school:['学校','所在学校','school'],status:['学生状态','状态','学籍状态','status'],enrollmentDate:['入学日期','入学时间','enrollmentDate','enrollment_date'],currentStage:['学习阶段','当前阶段','currentStage','current_stage'],hydroUid:['Hydro UID','HydroUID','UID','hydroUid','hydro_uid'],rating:['Rating','rating分数','rating_score'],ratingRecordedAt:['Rating结算时间','最后结算时间','Rating记录时间','ratingRecordedAt','recordedAt'],accountMode:['账号处理','账户处理','accountMode'] };
 export interface FileRow { row:number; values:string[]; errors:string[] }
 export interface ParsedFile { sheets:string[];sheet:string;headers:string[];rows:FileRow[] }
 export function guessMapping(headers:string[]) { const result:Record<string,number>={};for(const [key,names]of Object.entries(aliases)){const matches=headers.flatMap((v,n)=>names.some(a=>a.toLowerCase()===v.replace(/^\uFEFF/,'').trim().toLowerCase())?[n]:[]);if(matches.length===1)result[key]=matches[0];}return result; }

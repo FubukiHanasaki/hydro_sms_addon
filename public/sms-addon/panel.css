@@ -360,3 +360,5 @@
 .sms-shell .sms-main .section__header.sms-header-export-only>.sms-export-only{width:auto;flex-shrink:0}
 @media(max-width:767px){.sms-member-toolbar{gap:8px}.sms-member-toolbar-actions{gap:4px}.sms-member-toolbar-actions>.button{padding-left:12px;padding-right:12px}}
 .sms-dialog-footer>.sms-dialog-export-actions,.sms-dialog-footer>.sms-dialog-footer-context,.sms-import-dialog .sms-dialog-footer>.sms-org-actions{margin:0;align-items:center}
+
+.sms-import-counts{grid-template-columns:repeat(6,minmax(0,1fr))}.sms-import-table{min-width:1200px}.sms-import-table td:nth-child(7){min-width:160px}.sms-import-table td:nth-child(8){min-width:190px}.sms-import-badge.is-skip{background:#f0f1f3;color:#77808a}@media(max-width:767px){.sms-import-counts{grid-template-columns:repeat(3,minmax(0,1fr))}}

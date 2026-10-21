@@ -38,12 +38,12 @@ export async function apply(ctx: Context) {
   await accounts.init();
   const bulk = new BulkService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
   await bulk.init();
-  const studentImport = new StudentImportService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
-  await studentImport.init();
   ctx.on('handler/before-prepare', async handler => { if (handler.user?._id > 0) await organization.ensureMainMembers(handler.user._id); });
   disableNativeDomainManagement(ctx);
   const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
   await rating.init();
+  const studentImport = new StudentImportService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)), rating);
+  await studentImport.init();
   installRating(ctx, rating, organization);
   const teaching = new TeachingService(ctx.db.db, service, organization, rating);
   await teaching.init();
