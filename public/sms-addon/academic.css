@@ -24,3 +24,20 @@ html[data-mantine-color-scheme=dark] #sms-app,html[data-mantine-color-scheme=dar
 .sms-shell .sms-authorization-binding .select{box-sizing:border-box;height:36px}
 .sms-shell .sms-authorization-binding>.button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:36px;line-height:1;margin:0}
 @media(max-width:767px){.sms-shell .sms-main #sms-permissions-section .section__header.sms-header-export-only>.section__title{flex-basis:auto}.sms-shell .sms-main #sms-permissions-section .section__header.sms-header-export-only>.section__tools.sms-export-only{width:auto}}
+
+/* Effective permissions: aligned actions and scopes, with a stationary header. */
+.sms-shell .sms-effective-dialog{width:min(920px,calc(100vw - 32px));max-height:85dvh;overflow:hidden}
+.sms-effective-dialog[open]{display:flex;flex-direction:column}
+.sms-effective-dialog .sms-dialog-header{padding:20px 24px 16px;border-bottom:1px solid var(--sms-ui-border);margin:0}
+.sms-effective-dialog .sms-dialog-body{padding:18px 24px 24px;max-height:none;overscroll-behavior:contain}
+.sms-effective-identity{display:inline-block;margin:0 0 18px;padding:5px 10px;border-radius:4px;background:var(--sms-ui-tint);color:var(--sms-ui-ink);font-size:13px;line-height:1.5}
+.sms-effective-dialog .sms-permission-modules{align-items:start;gap:16px;margin:0}
+.sms-effective-dialog .sms-permission-module{padding:0;overflow:hidden}
+.sms-effective-module-title{margin:0;padding:12px 16px;font-size:15px;font-weight:600;line-height:1.5;background:var(--sms-ui-tint);color:var(--sms-ui-ink)}
+.sms-effective-list{margin:0;padding:4px 16px}
+.sms-effective-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(50px,1fr);gap:12px;padding:8px 0;align-items:baseline;font-size:13px;line-height:1.6;border-bottom:1px solid var(--sms-ui-border)}
+.sms-effective-row:last-child{border-bottom:0}
+.sms-effective-row dt{color:var(--sms-ui-ink);font-weight:400}
+.sms-effective-row dd{margin:0;text-align:right;overflow-wrap:anywhere;color:var(--sms-ui-muted)}
+.sms-effective-row dd.is-all{color:var(--sms-ui-ink);font-weight:500}
+@media(max-width:600px){.sms-shell .sms-effective-dialog{width:calc(100vw - 16px);max-height:90dvh}.sms-effective-dialog .sms-dialog-header{padding:16px}.sms-effective-dialog .sms-dialog-body{padding:16px}.sms-effective-dialog .sms-permission-modules{grid-template-columns:minmax(0,1fr)}}

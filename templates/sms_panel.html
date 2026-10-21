@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=20261022-student-rating-import">
+<link rel="stylesheet" href="/sms-addon/panel.css?v=20261022-permission-layout">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -83,7 +83,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
     </ol></section>
     <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">加载中…</p><button type="button" class="link" id="sms-my-permissions">我的权限</button></div></section>
-    <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.2.0</p></div></div>
+    <div class="section side visible"><div class="section__body"><div class="sms-plugin-info"><span class="sms-plugin-version">插件版本 <strong>v0.2.0</strong></span><a href="https://github.com/FubukiHanasaki/hydro_sms_addon" target="_blank" rel="noopener noreferrer">github.com/FubukiHanasaki/hydro_sms_addon<span class="icon icon-external" aria-hidden="true"></span></a></div></div></div>
   </aside>
   <dialog id="sms-student-dialog" class="section visible sms-dialog" aria-labelledby="sms-dialog-title">
     <form id="sms-student-form">
@@ -110,9 +110,9 @@
 <script src="/sms-addon/teaching.js?build=overview-export-20261022" defer></script>
 <script src="/sms-addon/teachers.js?build=academic-auth-20261021" defer></script>
 <script src="/sms-addon/bulk.js?v=20261022-quiet-exports" defer></script>
-<script src="/sms-addon/student-import.js?v=20261022-student-rating-import" defer></script>
+<script src="/sms-addon/student-import.js?v=20261022-permission-layout" defer></script>
 <script src="/sms-addon/schedule-batch.js?v=20261022-quiet-exports" defer></script>
-<link rel="stylesheet" href="/sms-addon/academic.css?v=20261022-auth-search">
+<link rel="stylesheet" href="/sms-addon/academic.css?v=20261022-permission-layout">
 <script src="/sms-addon/academic.js?build=academic-auth-20261021" defer></script>
-<script src="/sms-addon/authorization.js?v=20261022-auth-search" defer></script>
+<script src="/sms-addon/authorization.js?v=20261022-permission-layout" defer></script>
 {% endblock %}
