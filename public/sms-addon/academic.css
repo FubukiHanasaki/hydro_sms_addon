@@ -8,3 +8,19 @@ html[data-mantine-color-scheme=dark] #sms-app,html[data-mantine-color-scheme=dar
 .sms-permission-check{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.5;min-height:24px;margin:6px 0}.sms-authorization-body .sms-permission-check input[type=checkbox],.sms-authorization-body .sms-template-rule input[type=checkbox]{appearance:auto;display:inline-block;position:static;opacity:1;width:15px;height:15px;margin:0;float:none;flex:none;accent-color:#5d9fd2}.sms-permission-classes .sms-permission-check{margin:0}.sms-permission-module .sms-permission-check{width:100%}
 
 .sms-permission-classes .sms-permission-check{overflow-wrap:anywhere;align-items:flex-start}.sms-permission-classes .sms-permission-check input{margin-top:3px!important}
+
+/* Match the search field and action height, independent of Hydro form margins. */
+.sms-shell .sms-authorization-target{align-items:center;gap:12px}
+.sms-shell .sms-authorization-target>.textbox{box-sizing:border-box;flex:0 1 360px;width:360px;min-width:0;height:36px;margin:0;line-height:normal}
+.sms-shell .sms-authorization-target>.button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:36px;line-height:1;margin:0;padding:0 20px;white-space:nowrap}
+.sms-authorization-target>.sms-secondary{overflow-wrap:anywhere;line-height:1.5}
+.sms-authorization-results{display:flex;flex-direction:column;gap:0;border:1px solid var(--sms-ui-border);border-radius:4px;max-height:280px;overflow:auto;margin-bottom:16px}
+.sms-authorization-results[hidden]{display:none}
+.sms-authorization-results>.sms-authorization-result{padding:10px 12px;text-align:left;border-bottom:1px solid var(--sms-ui-border);line-height:1.5;overflow-wrap:anywhere;background:transparent}
+.sms-authorization-results>.sms-authorization-result:last-child{border-bottom:0}
+.sms-authorization-result:hover,.sms-authorization-result:focus-visible{background:var(--sms-ui-tint)}
+@media(max-width:767px){.sms-shell .sms-authorization-target{gap:8px}.sms-shell .sms-authorization-target>.textbox{flex:1 1 0;width:0}.sms-shell .sms-authorization-target>.button{padding:0 14px}.sms-authorization-target>.sms-secondary:not(:empty){flex-basis:100%}}
+.sms-shell .sms-authorization-binding>.sms-field{margin-bottom:0}
+.sms-shell .sms-authorization-binding .select{box-sizing:border-box;height:36px}
+.sms-shell .sms-authorization-binding>.button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:36px;line-height:1;margin:0}
+@media(max-width:767px){.sms-shell .sms-main #sms-permissions-section .section__header.sms-header-export-only>.section__title{flex-basis:auto}.sms-shell .sms-main #sms-permissions-section .section__header.sms-header-export-only>.section__tools.sms-export-only{width:auto}}

@@ -67,6 +67,19 @@ export class AuthorizationService {
  async can(uid:number,code:string,classIds?:string[]){const ids=await this.scope(uid,code);return ids===null||!!(classIds?.length?classIds.every(id=>ids.includes(id)):classIds?false:ids.length);}
  async require(uid:number,code:string,classIds:string[]=[]){if(!await this.can(uid,code,classIds)){await this.db.collection('sms_audit').insertOne({uid,action:'authorization.denied',target:code,fields:classIds,at:new Date(),outcome:'denied'});throw new SmsError(403,`没有对应操作权限或超出班级范围：${code}`);}}
  async snapshot(uid:number){const c=await this.config(),admin=await this.admin(uid),scopes:Record<string,string[]|null>=Object.fromEntries(await Promise.all(CODES.map(async code=>[code,await this.scope(uid,code,c,admin)])));return {catalog:this.catalog(),classes:(await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).toArray()).filter(d=>admin||Object.entries(scopes).some(([code,ids])=>!GLOBAL_ONLY.has(code)&&(ids===null||ids.includes(String(d._id))))).map(d=>({id:String(d._id),name:d.name||String(d._id)})),legacyGrants:(await this.policy()).grants.filter(g=>g.uid===uid&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())),templateName:[...BUILTINS,...c.templates].find(t=>t.id===(c.bindings.find(b=>b.uid===uid)?.templateId??'legacy'))?.name,admin,revision:c.revision,templateId:c.bindings.find(b=>b.uid===uid)?.templateId??'legacy',scopes,capabilities:Object.fromEntries(Object.entries(scopes).map(([code,ids])=>[code,ids===null||!!ids.length]))};}
+ async searchAccounts(actor:number,query:unknown){
+  await this.requireAdmin(actor);
+  const q=text(query??'',80,'账号搜索词');if(!q)return [];
+  const pattern=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),match={$regex:pattern,$options:'i'};
+  return this.db.collection('user').aggregate([
+   {$match:{_id:{$gt:0}}},
+   {$lookup:{from:'sms_students',localField:'_id',foreignField:'hydroUid',pipeline:[{$project:{_id:0,'basic.name':1}}],as:'student'}},
+   {$lookup:{from:'sms_teachers',localField:'_id',foreignField:'hydroUid',pipeline:[{$project:{_id:0,'basic.name':1}}],as:'teacher'}},
+   {$match:{$or:[{uname:match},{'student.basic.name':match},{'teacher.basic.name':match},.../^\d+$/.test(q)?[{_id:Number(q)}]:[]]}},
+   {$set:{exactUid:{$eq:['$_id',Number(q)]}}},{$sort:{exactUid:-1,_id:1}},{$limit:20},
+   {$project:{_id:0,uid:'$_id',username:'$uname',studentName:{$ifNull:[{$first:'$student.basic.name'},null]},teacherName:{$ifNull:[{$first:'$teacher.basic.name'},null]}}},
+  ]).toArray();
+ }
  async manage(uid:number){await this.requireAdmin(uid);const c=await this.config();return {...c,templates:[...BUILTINS,...c.templates],catalog:this.catalog(),classes:await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).sort({_id:1}).toArray()};}
  async update(uid:number,value:unknown){
   await this.requireAdmin(uid);const b=object(value),c=await this.config();if(b.revision!==c.revision)throw new SmsError(409,'权限配置已变化，请刷新');

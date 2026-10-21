@@ -114,6 +114,8 @@ export async function apply(ctx: Context) {
   }
   class SmsEffectiveHandler extends SmsApiHandler {async get(){await this.run(()=>(async()=>{const target=Number(this.context.query.uid||this.user._id);if(target!==this.user._id)await service.requireAdmin(this.user._id);if(!Number.isSafeInteger(target)||target<=0)throw new SmsError(400,'UID 无效');return service.authorization.snapshot(target);})());}}
   class SmsAcademicHandler extends SmsApiHandler {async get(){await this.run(()=>academic.board(this.user._id,this.context.query));}}
+  class SmsAuthorizationAccountsHandler extends SmsApiHandler {async get(){await this.run(()=>service.authorization.searchAccounts(this.user._id,this.context.query.q));}}
+  ctx.Route('sms_api_authorization_accounts','/sms/api/authorization/accounts',SmsAuthorizationAccountsHandler);
   ctx.Route('sms_api_authorization','/sms/api/authorization',SmsAuthorizationHandler);
   ctx.Route('sms_api_effective','/sms/api/authorization/effective',SmsEffectiveHandler);
   ctx.Route('sms_api_academic','/sms/api/teaching/academic',SmsAcademicHandler);
