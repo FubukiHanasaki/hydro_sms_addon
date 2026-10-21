@@ -12,6 +12,7 @@
   }
   async function load() {
     const serial = ++request; const url = new URL(app.dataset.accounts, location.origin); url.search = new URLSearchParams({ q: $('sms-account-query').value, enabled: $('sms-account-enabled').value, page }); const data = await api(url); if (serial !== request) return;
+    app.dataset.exportAccounts = JSON.stringify(Object.fromEntries(url.searchParams));
     currentRows = data.accounts; for (const a of data.accounts) if (selected.has(a.uid)) { if (a.protected) selected.delete(a.uid); else selected.set(a.uid, a); }
     const rows = $('sms-account-rows'); rows.replaceChildren();
     for (const account of data.accounts) {

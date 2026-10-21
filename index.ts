@@ -1,3 +1,4 @@
+import { ExportService } from './src/exports';
 import { StudentImportService } from './src/student-import';
 import { BulkService } from './src/bulk';
 import { TeacherService } from './src/teachers';
@@ -44,6 +45,7 @@ export async function apply(ctx: Context) {
   installRating(ctx, rating, organization);
   const teaching = new TeachingService(ctx.db.db, service, organization, rating);
   await teaching.init();
+  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport);
   UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
@@ -84,6 +86,23 @@ export async function apply(ctx: Context) {
     }
     body() { return this.context.request.body; }
   }
+  class SmsExportHandler extends SmsApiHandler {
+    async get() {
+      const kind = this.context.params.kind;
+      if (['rating', 'rating-history'].includes(kind)) this.checkPerm(PERM.PERM_VIEW_RANKING);
+      try {
+        const file = await exports.download(this.user._id, kind, this.context.query, this.args.domainId || 'system');
+        this.response.type = file.type;
+        this.response.addHeader('Content-Disposition', `attachment; filename="export.${file.filename.split('.').at(-1)}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`);
+        this.response.addHeader('X-Content-Type-Options', 'nosniff');
+        this.response.body = file.bytes;
+      } catch (e) {
+        if (!(e instanceof SmsError)) throw e;
+        this.response.status=e.status;this.response.type='application/json';this.response.body={message:e.message};
+      }
+    }
+  }
+  ctx.Route('sms_api_export','/sms/api/exports/:kind',SmsExportHandler);
   class SmsMeHandler extends SmsApiHandler {
     async get() { await this.run(() => service.me(this.user._id)); }
   }

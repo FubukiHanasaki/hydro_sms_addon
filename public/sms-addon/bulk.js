@@ -27,7 +27,8 @@
     if(j.skippedItems?.length){const details=el('details','sms-bulk-skipped');details.append(el('summary','',`跳过 ${j.skippedItems.length} 条`),table(['学生','原因'],j.skippedItems.map(i=>[i.name,i.reason])));content.append(details);}
     submit.hidden=!['preview','running','undoing'].includes(j.status)||(preview&&!j.total);submit.textContent=preview?'确认执行':j.status==='undoing'?'继续撤销':'继续处理';
     work=async()=>{if(j.status==='undoing')return undo(j.id);if(password&&password.value!==verifyPassword.value)throw Error('两次密码输入不一致');if(warning&&!warning.checked)throw Error('请勾选重复升年级确认');const result=await api(`${base}/${j.id}`,{...(warning?{confirmWarning:warning.checked}:{}),...(password?{password:password.value}:{})});render(result);app.dispatchEvent(new CustomEvent('sms:bulk-complete'));};
-    if(j.kind==='provision'&&j.status==='completed')content.append(button('导出本批账号',()=>{const lines=['学生,UID,用户名,初始密码',...j.items.map(i=>[i.name,i.uid,i.username,i.username].map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(','))];const a=el('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));a.download=`accounts-${j.id}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},'rounded button'));
+    if(j.status!=='preview')content.append(globalThis.SmsExport.control('导出结果','bulk-result',()=>({id:j.id})));
+    if(j.kind==='provision'&&j.status==='completed')content.append(globalThis.SmsExport.control('导出本批账号','bulk-accounts',()=>({id:j.id})));
   }
   async function previewJob(kind){const serial=++generation;submit.disabled=true;try{const j=await api(base,{kind,...(kind==='promotion'?{resumeIds}:{}),...(kind==='password'?{uids}:{})});if(serial===generation&&d.open)render(j);}finally{if(serial===generation)submit.disabled=false;}}
   async function undo(id){const j=await api(`${base}/${id}/undo`,{});render(j);app.dispatchEvent(new CustomEvent('sms:bulk-complete'));}

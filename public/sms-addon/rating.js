@@ -160,6 +160,7 @@
                 b.setAttribute('aria-pressed', String(period === key));
                 range.append(b);
             }
+            range.append(globalThis.SmsExport.control('导出历史','rating-history',()=>({uid,period})));
             draw();
             details.body.replaceChildren();
             for (const c of data.history) {
@@ -189,6 +190,7 @@
     const historyBase = app?.dataset.ratingHistory || native?.dataset.historyApi;
     native?.querySelectorAll('.sms-rating-view').forEach(b => b.addEventListener('click', () => history(b.dataset.uid, historyBase).catch(error)));
     for (const profile of document.querySelectorAll('[data-sms-profile-rating]')) {
+        if(profile.querySelector('.sms-profile-history'))profile.querySelector('.sms-profile-rating-header').append(globalThis.SmsExport.control('导出历史','rating-history',()=>({uid:profile.dataset.smsProfileRating})));
         const base = profile.dataset.api.replace(/\/\d+$/, '');
         profile.querySelector('.sms-profile-history')?.addEventListener('click', () => history(profile.dataset.smsProfileRating, base).catch(error));
         if (profile.querySelector('.sms-profile-history'))
@@ -208,6 +210,7 @@
         classes.replaceChildren(all);
         for (const c of data.classScope.classes) { const option = el('option', '', c.name || c._id); option.value = c._id; classes.append(option); }
         classes.value = data.classScope.selected;
+        app.dataset.exportRating=JSON.stringify(Object.fromEntries(url.searchParams));
         boardStats = data.stats;
         const rows = $('sms-rating-rows');
         rows.replaceChildren();

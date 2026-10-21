@@ -19,6 +19,7 @@
     const serial = ++request; const url = new URL(app.dataset.classes, location.origin);
     url.search = new URLSearchParams({ q: $('sms-class-query').value, status: $('sms-class-status').value, page });
     const result = await api(url); if (serial !== request) return;
+    app.dataset.exportClasses = JSON.stringify(Object.fromEntries(url.searchParams));
     const rows = $('sms-class-rows'); rows.replaceChildren();
     for (const c of result.classes) {
       const row = el('tr'); const name = el('td'); name.append(el('div', 'sms-student-name', c.name), el('div', 'sms-secondary', c.domainId)); row.append(name);
@@ -62,7 +63,7 @@
     let memberPage = 1; let version = c.version; let serial = 0; let busy = false;
     const body = root.closest('.sms-dialog-body'); const toolbar = el('div', 'sms-member-toolbar'); root.append(toolbar);
     const query = field(toolbar, 'member-search', '查找成员'); query.type = 'search'; query.placeholder = '用户名、姓名或 UID';
-    const refresh = button('刷新', () => load()); toolbar.append(refresh);
+    let exportQuery='';const refresh = button('刷新', () => load()); toolbar.append(refresh,globalThis.SmsExport.control('导出成员','members',()=>({classId:id,q:exportQuery})));
     const summary = el('p', 'help-text'); summary.id = 'sms-member-summary'; root.append(summary);
     const list = el('div', 'sms-member-list'); list.id = 'sms-member-list'; root.append(list);
     const pager = $('sms-org-pagination'); pager.hidden = false;
@@ -89,7 +90,7 @@
         const url = new URL(`${app.dataset.domains}/${encodeURIComponent(id)}/members`, location.origin); url.search = new URLSearchParams({ q: query.value, page: memberPage });
         const data = await api(url); if (current !== serial || activeDialog !== dialogSerial) return;
         if (memberPage > 1 && !data.members.length) { memberPage = Math.max(1, Math.ceil(data.total / 20)); return load(); }
-        version = data.version; summary.textContent = `共 ${data.total} 名成员`; list.replaceChildren();
+        exportQuery=query.value;version = data.version; summary.textContent = `共 ${data.total} 名成员`; list.replaceChildren();
         for (const m of data.members) {
           const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.studentName || m.username), el('div', 'sms-secondary', `${m.studentName ? `${m.username} · ` : ''}UID ${m.uid}`));
           row.append(person); const actions = el('div', 'sms-member-actions');
