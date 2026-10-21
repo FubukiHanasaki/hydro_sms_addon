@@ -1,7 +1,7 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=0.2.0">
-<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=student-filters-20261021">
+<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
@@ -11,10 +11,18 @@
       </div>
       <div class="section__body">
         <p id="sms-summary" class="help-text">正在加载可访问的学生资料</p>
-        <form id="sms-search-form" class="sms-toolbar">
-          <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名" maxlength="80" aria-label="搜索姓名">
-          <select id="sms-status" class="select" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
-          <button class="rounded button" type="submit"><span class="icon icon-search"></span> 查询</button>
+        <form id="sms-search-form">
+          <div class="sms-toolbar">
+            <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名" maxlength="80" aria-label="搜索姓名">
+            <select id="sms-status" class="select" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
+            <button class="rounded button" type="submit"><span class="icon icon-search"></span> 查询</button>
+            <button class="rounded button" type="button" id="sms-reset-filters">重置</button>
+          </div>
+          <div class="sms-filter-row">
+            <label>年级<select id="sms-grade" class="select" aria-label="筛选年级"><option value="">全部年级</option></select></label>
+            <label>所在子域<select id="sms-domain" class="select" aria-label="筛选所在子域"><option value="">全部子域</option></select></label>
+            <label>学校<select id="sms-school" class="select" aria-label="筛选学校"><option value="">全部学校</option></select></label>
+          </div>
         </form>
       </div>
       <div class="section__body no-padding"><div class="section__table-container sms-table-scroll">
@@ -62,5 +70,5 @@
     </form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?v=0.2.0" defer></script>
+<script src="/sms-addon/panel.js?build=student-filters-20261021" defer></script>
 {% endblock %}

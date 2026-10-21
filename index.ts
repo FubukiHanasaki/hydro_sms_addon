@@ -18,7 +18,7 @@ export async function apply(ctx: Context) {
       this.checkPriv(PRIV.PRIV_USER_PROFILE);
       privateResponse(this);
       this.response.template = 'sms_panel.html';
-      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users') };
+      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters') };
     }
   }
   class SmsApiHandler extends Handler {
@@ -51,7 +51,7 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.me(this.user._id)); }
   }
   class SmsStudentsHandler extends SmsApiHandler {
-    async get() { await this.run(() => service.list(this.user._id, this.context.query.q, this.context.query.page, this.context.query.status)); }
+    async get() { await this.run(() => service.list(this.user._id, this.context.query.q, this.context.query.page, this.context.query.status, { grade: this.context.query.grade, school: this.context.query.school, domainId: this.context.query.domainId })); }
     async post() { await this.run(() => service.create(this.user._id, this.body())); }
   }
   class SmsStudentHandler extends SmsApiHandler {
@@ -68,6 +68,9 @@ export async function apply(ctx: Context) {
   class SmsUsersHandler extends SmsApiHandler {
     async get() { await this.run(() => service.searchUsers(this.user._id, this.context.query.q, this.context.query.studentId)); }
   }
+  class SmsStudentFiltersHandler extends SmsApiHandler {
+    async get() { await this.run(() => service.filterOptions(this.user._id)); }
+  }
 
   ctx.Route('sms_panel', '/sms', SmsPanelHandler);
   ctx.Route('sms_api_me', '/sms/api/me', SmsMeHandler);
@@ -76,6 +79,7 @@ export async function apply(ctx: Context) {
   ctx.Route('sms_api_permissions', '/sms/api/permissions', SmsPermissionsHandler);
   ctx.Route('sms_api_audit', '/sms/api/audit', SmsAuditHandler);
   ctx.Route('sms_api_users', '/sms/api/users', SmsUsersHandler);
+  ctx.Route('sms_api_student_filters', '/sms/api/student-filters', SmsStudentFiltersHandler);
   ctx.injectUI('Nav', 'sms_panel', { prefix: 'sms' }, PRIV.PRIV_USER_PROFILE);
   ctx.i18n.load('zh', { sms_panel: '学生管理' });
   ctx.i18n.load('en', { sms_panel: 'Student management' });

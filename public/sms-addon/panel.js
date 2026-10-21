@@ -45,12 +45,27 @@
   function dateTime(value) {
     return new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
   }
+  async function loadFilterOptions() {
+    const filters = await api(app.dataset.filters);
+    const fill = (id, placeholder, entries) => {
+      const select = $(id); const current = select.value;
+      const all = element('option', '', placeholder); all.value = '';
+      select.replaceChildren(all);
+      for (const [value, label] of entries) {
+        const option = element('option', '', label); option.value = value; select.append(option);
+      }
+      select.value = entries.some(([value]) => value === current) ? current : '';
+    };
+    fill('sms-grade', '全部年级', filters.grades.map((grade) => [grade, grade]));
+    fill('sms-school', '全部学校', filters.schools.map((school) => [school, school]));
+    fill('sms-domain', '全部子域', filters.domains.map((domain) => [domain.id, `${domain.name}（${domain.id}）`]));
+  }
   async function loadStudents() {
     const request = ++state.request;
     $('sms-prev').disabled = $('sms-next').disabled = true;
     $('sms-summary').textContent = '正在加载…';
     const url = new URL(app.dataset.api, location.origin);
-    url.search = new URLSearchParams({ q: $('sms-search').value.trim(), status: $('sms-status').value, page: state.page });
+    url.search = new URLSearchParams({ q: $('sms-search').value.trim(), status: $('sms-status').value, page: state.page, grade: $('sms-grade').value, domainId: $('sms-domain').value, school: $('sms-school').value });
     try {
       const result = await api(url);
       if (request !== state.request) return;
@@ -81,6 +96,10 @@
       const actions = element('td'); const view = element('button', 'link sms-link', '查看资料 →'); view.type = 'button'; view.addEventListener('click', () => openStudent(student.id)); actions.append(view); row.append(actions); rows.append(row);
     }
     $('sms-empty').hidden = state.students.length !== 0;
+    const filtered = ['sms-search', 'sms-status', 'sms-grade', 'sms-domain', 'sms-school'].some((id) => $(id).value.trim());
+    const empty = $('sms-empty');
+    empty.querySelector('p').textContent = filtered ? '没有符合筛选条件的学生' : '暂无可查看的学生档案';
+    empty.querySelector('.help-text').textContent = filtered ? '请调整条件或点击「重置」查看全部可访问学生。' : '绑定学生账号或由插件管理员授权后，资料会显示在这里。';
     $('sms-summary').textContent = `共 ${state.total} 名可访问学生 · 资料按最近更新时间排列`;
     $('sms-page-label').textContent = `第 ${state.page} / ${Math.max(1, Math.ceil(state.total / 20))} 页 · 每页 20 条`;
     $('sms-prev').disabled = state.page <= 1;
@@ -197,6 +216,7 @@
       const result = await api(student ? `${app.dataset.api}/${encodeURIComponent(student.id)}` : app.dataset.api, body);
       $('sms-student-dialog').close();
       notice(result.generatedAccount ? `学生已创建。Hydro 用户名：${result.generatedAccount.username}，初始密码：${result.generatedAccount.username}，UID：${result.generatedAccount.uid}。` : student ? '学生资料已保存。' : '学生档案已创建，已关联现有账号。');
+      await loadFilterOptions();
       await loadStudents();
     } catch (error) { $('sms-dialog-error').textContent = error.message; $('sms-dialog-error').hidden = false; $('sms-dialog-error').scrollIntoView({ block: 'nearest' }); }
     finally { $('sms-save-student').disabled = false; }
@@ -281,10 +301,12 @@
     state.tab = tab; notice('');
     for (const name of ['students', 'permissions', 'audit']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
-    try { if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else await loadStudents(); }
+    try { if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
     catch (error) { notice(error.message, true); }
   }
   $('sms-search-form').addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; notice(''); loadStudents(); });
+  for (const id of ['sms-grade', 'sms-domain', 'sms-school', 'sms-status']) $(id).addEventListener('change', () => { state.page = 1; notice(''); loadStudents(); });
+  $('sms-reset-filters').addEventListener('click', () => { $('sms-search-form').reset(); state.page = 1; notice(''); loadStudents(); });
   $('sms-prev').addEventListener('click', () => { state.page--; loadStudents(); });
   $('sms-next').addEventListener('click', () => { state.page++; loadStudents(); });
   $('sms-create').addEventListener('click', () => openStudent());
@@ -302,6 +324,7 @@
       $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
       $('sms-create').hidden = $('sms-permissions-nav').hidden = $('sms-audit-nav').hidden = !state.me.admin;
       if (!state.me.initialized) notice('插件尚未初始化，请由服务器维护人员指定首位插件管理员。');
+      await loadFilterOptions();
       await loadStudents();
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();

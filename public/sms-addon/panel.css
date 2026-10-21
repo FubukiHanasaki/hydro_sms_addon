@@ -227,3 +227,19 @@
   opacity: .5;
   cursor: default;
 }
+.sms-filter-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 16px;
+}
+.sms-filter-row > label {
+  min-width: 0;
+}
+.sms-filter-row .select {
+  width: 100%;
+}
+@media (max-width: 767px) {
+  .sms-filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

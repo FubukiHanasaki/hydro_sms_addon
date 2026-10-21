@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Db, Filter } from 'mongodb';
+import type { Db } from 'mongodb';
 import { activeGrant, allows, canRead, isAdmin, readFilter, visibleStudent } from './access';
 import { Policy, SmsError, Student, basicView } from './types';
 import { object, positiveInt, text, validateBasic, validateGrant, validateSensitive } from './validation';
@@ -51,12 +51,46 @@ export class StudentService {
       boundStudentId: (await this.students.findOne({ hydroUid: uid }, { projection: { _id: 1 } }))?._id ?? null,
     };
   }
-  async list(uid: number, query: unknown, pageValue: unknown, statusValue: unknown) {
+  async filterOptions(uid: number) {
+    const policy = await this.policy();
+    const [options] = await this.students.aggregate<{
+      grades: { _id: string }[]; schools: { _id: string }[]; domains: { id: string; name?: string }[];
+    }>([
+      { $match: readFilter(policy, uid) },
+      { $project: { 'basic.grade': 1, 'basic.school': 1, hydroUid: 1 } },
+      { $facet: {
+        grades: [{ $group: { _id: '$basic.grade' } }, { $match: { _id: { $type: 'string', $ne: '' } } }],
+        schools: [{ $group: { _id: '$basic.school' } }, { $match: { _id: { $type: 'string', $ne: '' } } }],
+        domains: [
+          { $match: { hydroUid: { $type: 'number' } } },
+          { $lookup: { from: 'domain.user', localField: 'hydroUid', foreignField: 'uid', as: 'membership' } },
+          { $unwind: '$membership' },
+          { $match: { 'membership.join': true } },
+          { $group: { _id: '$membership.domainId' } },
+          { $lookup: { from: 'domain', localField: '_id', foreignField: '_id', as: 'domain' } },
+          { $unwind: '$domain' },
+          { $project: { _id: 0, id: '$domain._id', name: '$domain.name' } },
+        ],
+      } },
+    ]).toArray();
+    const compare = new Intl.Collator('zh-CN', { numeric: true }).compare;
+    const gradeOrder = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '七年级', '八年级', '九年级', '高一', '高二', '高三', '已毕业'];
+    const rank = (grade: string) => gradeOrder.includes(grade) ? gradeOrder.indexOf(grade) : gradeOrder.length;
+    return {
+      grades: (options?.grades ?? []).map((g) => g._id).sort((a, b) => rank(a) - rank(b) || compare(a, b)),
+      schools: (options?.schools ?? []).map((s) => s._id).sort(compare),
+      domains: (options?.domains ?? []).map((d) => ({ id: d.id, name: d.name || d.id })).sort((a, b) => compare(a.name, b.name)),
+    };
+  }
+  async list(uid: number, query: unknown, pageValue: unknown, statusValue: unknown, extra: { grade?: unknown; school?: unknown; domainId?: unknown } = {}) {
     const policy = await this.policy();
     const page = Number(pageValue ?? 1);
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
     const q = text(query ?? '', 80, '搜索词');
     const status = text(statusValue ?? '', 10, '状态');
+    const grade = text(extra.grade ?? '', 160, '年级');
+    const school = text(extra.school ?? '', 160, '学校');
+    const domainId = text(extra.domainId ?? '', 160, '子域');
     if (status && !['在校', '休学', '离校'].includes(status)) throw new SmsError(400, '状态无效');
     const and: Record<string, unknown>[] = [readFilter(policy, uid)];
     if (q) {
@@ -64,11 +98,31 @@ export class StudentService {
       and.push({ 'basic.name': { $regex: pattern, $options: 'i' } });
     }
     if (status) and.push({ 'basic.status': status });
-    const filter = { $and: and } as Filter<Student>;
-    const [total, rows] = await Promise.all([
-      this.students.countDocuments(filter),
-      this.students.find(filter, { projection: { basic: 1, hydroUid: 1, version: 1, updatedAt: 1 } }).sort({ updatedAt: -1, _id: 1 }).skip((page - 1) * 20).limit(20).toArray(),
-    ]);
+    if (grade) and.push({ 'basic.grade': grade });
+    if (school) and.push({ 'basic.school': school });
+    if (domainId && !await this.db.collection<{ _id: string }>('domain').findOne({ _id: domainId }, { projection: { _id: 1 } })) {
+      return { total: 0, page, pageSize: 20, students: [] };
+    }
+    const [result] = await this.students.aggregate<{ count: { total: number }[]; students: Student[] }>([
+      { $match: { $and: and } },
+      ...domainId ? [
+        { $match: { hydroUid: { $type: 'number', $gt: 0 } } },
+        { $lookup: {
+          from: 'domain.user', let: { uid: '$hydroUid' }, as: 'smsMembership',
+          pipeline: [{ $match: { domainId, join: true, $expr: { $eq: ['$uid', '$$uid'] } } }, { $limit: 1 }],
+        } },
+        { $match: { 'smsMembership.0': { $exists: true } } },
+      ] : [],
+      { $facet: {
+        count: [{ $count: 'total' }],
+        students: [
+          { $sort: { updatedAt: -1, _id: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 },
+          { $project: { basic: 1, hydroUid: 1, version: 1, updatedAt: 1 } },
+        ],
+      } },
+    ]).toArray();
+    const total = result?.count[0]?.total ?? 0;
+    const rows = result?.students ?? [];
     // Lists never contain contact details or internal notes, including for administrators.
     return { total, page, pageSize: 20, students: rows.map((s) => ({ id: s._id, ...basicView(s.basic), hydroUid: s.hydroUid ?? null, version: s.version })) };
   }
