@@ -31,3 +31,20 @@ html[data-mantine-color-scheme=dark] .sms-cf-chart{--sms-cf-line:#eee;--sms-cf-p
 .sms-cf-chart .sms-chart-selected{pointer-events:none}
 html[data-mantine-color-scheme=dark] .sms-profile-rating .sms-rating-tier-value{filter:brightness(1.6)}
 html[data-mantine-color-scheme=dark] .sms-profile-rating .sms-profile-history{background:#3a3b40;color:#e7e7e7;border-color:#52535a}
+
+/* Keep ranking tables intact: Hydro's data-table enhancer moves the header
+   after first paint, then measures it during the section entrance animation. */
+.sms-ranking-table{width:100%;table-layout:fixed;white-space:nowrap;font-size:13px;font-weight:400;border-collapse:collapse}
+.sms-ranking-table th{font-size:14px;font-weight:400}
+.sms-ranking-table tr{border-top:1px solid #ddd;border-bottom:1px solid #ddd}
+.sms-ranking-table tbody tr:nth-child(even){background:#f4f4f4}
+.sms-ranking-table thead tr{color:#888;border-top:0}
+.sms-ranking-table td,.sms-ranking-table th{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:20px;padding:5px 15px}
+.sms-ranking-table th{padding-top:13px;padding-bottom:13px}
+.sms-ranking-table td:first-child,.sms-ranking-table th:first-child{padding-left:15px}
+.sms-ranking-table td:last-child,.sms-ranking-table th:last-child{padding-right:15px}
+html:has([data-sms-native-rating]){scrollbar-gutter:stable}
+@supports not (scrollbar-gutter:stable){html:has([data-sms-native-rating]){overflow-y:scroll}}
+.hasjs [data-sms-native-rating],.hasjs #sms-rating-section{transform:none!important;opacity:1!important;transition:none!important;animation:none!important}
+html[data-mantine-color-scheme=dark] .sms-ranking-table tr{border-color:#444}
+html[data-mantine-color-scheme=dark] .sms-ranking-table tbody tr:nth-child(even){background:#ffffff06}

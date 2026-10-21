@@ -41,7 +41,7 @@
     <section id="sms-rating-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">Rating</h1><div class="section__tools sms-rating-admin" hidden><button type="button" class="rounded button" id="sms-rating-config">比赛设置</button><button type="button" class="primary rounded button" id="sms-rating-import">导入记录</button></div></div>
       <div class="section__body"><form id="sms-rating-search" class="sms-rating-toolbar"><input id="sms-rating-query" class="textbox" type="search" placeholder="用户名或 UID" aria-label="搜索 Rating"><select id="sms-rating-mode" class="select" aria-label="榜单"><option value="all">总榜</option><option value="recent">近 30 天进步榜</option></select><select id="sms-rating-class" class="select" aria-label="筛选班级"><option value="">全部班级</option></select><select id="sms-rating-grade" class="select" aria-label="年级"><option value="">全部年级</option></select><select id="sms-rating-school" class="select" aria-label="学校"><option value="">全部学校</option></select><button type="submit" class="rounded button">查询</button></form><div class="sms-rating-summary-row"><p id="sms-rating-summary" class="help-text"></p><button type="button" class="link" id="sms-rating-stats">数据概览</button></div></div>
-      <div class="section__body no-padding sms-table-scroll"><table class="data-table sms-rating-table"><colgroup><col style="width:7%"><col style="width:20%"><col style="width:25%"><col style="width:17%"><col style="width:14%"><col style="width:17%"></colgroup><thead><tr><th>排名</th><th>用户</th><th>Rating / 称号</th><th>近 30 天</th><th>计分比赛</th><th>操作</th></tr></thead><tbody id="sms-rating-rows"></tbody></table></div>
+      <div class="section__body no-padding sms-table-scroll"><table class="sms-ranking-table sms-rating-table"><colgroup><col style="width:7%"><col style="width:20%"><col style="width:25%"><col style="width:17%"><col style="width:14%"><col style="width:17%"></colgroup><thead><tr><th>排名</th><th>用户</th><th>Rating / 称号</th><th>近 30 天</th><th>计分比赛</th><th>操作</th></tr></thead><tbody id="sms-rating-rows"></tbody></table></div>
       <div class="section__body sms-pagination"><span id="sms-rating-page"></span><div><button type="button" class="rounded button" id="sms-rating-prev">上一页</button><button type="button" class="rounded button" id="sms-rating-next">下一页</button></div></div>
     </section>
     <div id="sms-permissions-section" hidden>
@@ -93,6 +93,6 @@
 <script src="/sms-addon/panel.js?build=profile-overview-20261021" defer></script>
 <script src="/sms-addon/organization.js?build=profile-overview-20261021" defer></script>
 <script src="/sms-addon/accounts.js?build=profile-overview-20261021" defer></script>
-<link rel="stylesheet" href="/sms-addon/rating.css?build=ranking-badges-20261021">
+<link rel="stylesheet" href="/sms-addon/rating.css?build=ranking-stable-20261021">
 <script src="/sms-addon/rating.js?build=ranking-badges-20261021" defer></script>
 {% endblock %}
