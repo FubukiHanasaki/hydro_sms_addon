@@ -23,7 +23,7 @@
     for (const c of result.classes) {
       const row = el('tr'); const name = el('td'); name.append(el('div', 'sms-student-name', c.name), el('div', 'sms-secondary', c.domainId)); row.append(name);
       for (const text of [[c.type, c.academicYear].filter(Boolean).join(' / ') || '—', c.memberCount ?? '—', c.status === 'active' ? '开班中' : '已归档']) row.append(el('td', '', text));
-      const actions = el('td'); const group = el('div', 'sms-org-actions'); group.append(button(me.admin ? '编辑资料' : '查看资料', () => openClass(c._id), 'link sms-link'), button('成员', () => members(c._id), 'link sms-link'));
+      const actions = el('td'); const group = el('div', 'sms-org-actions'); group.append(button('详情', () => app.dispatchEvent(new CustomEvent('sms:class-detail', { detail: { id: c._id } })), 'link sms-link'), button(me.admin ? '编辑资料' : '查看资料', () => openClass(c._id), 'link sms-link'), button('成员', () => members(c._id), 'link sms-link'));
       const link = el('a', 'link sms-link', '进入子域 ↗'); link.href = `/d/${encodeURIComponent(c.domainId)}/`; group.append(link); actions.append(group); row.append(actions); rows.append(row);
     }
     if (!result.total) { const row = el('tr'); const cell = el('td', 'help-text', '暂无符合条件的班级与子域'); cell.colSpan = 5; row.append(cell); rows.append(row); }
