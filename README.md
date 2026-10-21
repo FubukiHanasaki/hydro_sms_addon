@@ -20,7 +20,7 @@ Hydro 原生学生信息管理插件。只使用 Hydro 账号登录，业务授�
 
 Rating 已接入旧系统计算规则，并提供按 Hydro UID、分数、记录时间导入历史序列的预览与确认流程；不要求迁移旧考试数据。完整学生资料批量迁移另行建设。
 
-课程、排课、考勤和班级 Rating 分析已接入「班级与子域 → 详情」，详见 [课程、排课与班级详情](docs/teaching.md)。
+课程管理（`/sms#courses`）与排课管理（`/sms#schedules`）为独立入口：课程保存实际授课与考勤，排课保存每周计划。班级概览和 Rating 分析位于「班级与子域 → 详情」，详见 [课程、排课与班级详情](docs/teaching.md)。
 
 ## 安装
 
@@ -121,6 +121,7 @@ node scripts/admin.cjs revoke 123 /absolute/path/to/hydro/config.json
 
 - `sms_students`：字符串主键、基本/敏感资料、内部备注、可选 Hydro UID、版本号与创建/更新操作者。
 - `sms_account_jobs`：自动建号请求标识、操作者、资料摘要和处理状态；不保存密码或完整学生资料。
+- `sms_teaching_plans` / `sms_teaching_adjustments` / `sms_teaching_records`：每周排课与生效版本、临时调整、独立实际课程及考勤，详见 [教学管理](docs/teaching.md)。
 - `sms_classes`：唯一子域关联、班级扩展资料、教师 UID、显式成员身份、共享版本、同步状态与更新记录。
 - `sms_account_state` / `sms_account_locks`：账户管理版本与短期操作锁，不保存密码。
 - `sms_org_locks`：按域保存的短期更新锁，包含随机令牌和失效时间，不保存成员资料。

@@ -146,6 +146,10 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => organization.classDetail(this.user._id, this.context.params.id)); }
     async post() { await this.run(() => organization.classSave(this.user._id, this.context.params.id, this.body())); }
   }
+  class SmsTeachingClassesHandler extends SmsApiHandler {
+    async get() { await this.run(() => teaching.classes(this.user._id)); }
+  }
+  ctx.Route('sms_api_teaching_classes', '/sms/api/teaching/classes', SmsTeachingClassesHandler);
   class SmsTeachingHandler extends SmsApiHandler {
     async get() { await this.run(() => teaching.overview(this.user._id, this.context.params.id, this.context.query.from, this.context.query.to)); }
   }
@@ -153,15 +157,15 @@ export async function apply(ctx: Context) {
     async post() { await this.run(() => teaching.saveCourse(this.user._id, this.context.params.id, this.body())); }
   }
   class SmsScheduleSaveHandler extends SmsApiHandler {
-    async post() { await this.run(() => teaching.schedule(this.user._id, this.context.params.id, this.body())); }
+    async post() { await this.run(() => teaching.savePlan(this.user._id, this.context.params.id, this.body())); }
   }
   class SmsLessonSaveHandler extends SmsApiHandler {
-    async post() { await this.run(() => teaching.updateLesson(this.user._id, this.context.params.id, this.context.params.scheduleId, this.context.params.lessonId, this.body())); }
+    async post() { await this.run(() => teaching.changeLesson(this.user._id, this.context.params.id, this.context.params.lessonId, this.body())); }
   }
   ctx.Route('sms_api_teaching', '/sms/api/classes/:id/teaching', SmsTeachingHandler);
   ctx.Route('sms_api_courses_save', '/sms/api/classes/:id/courses', SmsCourseSaveHandler);
   ctx.Route('sms_api_schedules_save', '/sms/api/classes/:id/schedules', SmsScheduleSaveHandler);
-  ctx.Route('sms_api_lessons_save', '/sms/api/classes/:id/schedules/:scheduleId/lessons/:lessonId', SmsLessonSaveHandler);
+  ctx.Route('sms_api_lessons_save', '/sms/api/classes/:id/lessons/:lessonId', SmsLessonSaveHandler);
   ctx.Route('sms_api_domains', '/sms/api/domains', SmsDomainsHandler);
   ctx.Route('sms_api_domain_members', '/sms/api/domains/:id/members', SmsDomainMembersHandler);
   ctx.Route('sms_api_classes', '/sms/api/classes', SmsClassesHandler);

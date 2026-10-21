@@ -26,6 +26,8 @@
       </div><div id="sms-empty" class="sms-empty" hidden><p>暂无学生档案</p></div></div>
       <div class="section__body sms-pagination"><span id="sms-page-label" class="help-text"></span><div><button type="button" id="sms-prev" class="rounded button">上一页</button><button type="button" id="sms-next" class="rounded button">下一页</button></div></div>
     </section>
+    <section id="sms-courses-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">课程管理</h1></div><div id="sms-courses-workspace" class="section__body sms-teaching-workspace"></div></section>
+    <section id="sms-schedules-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">排课管理</h1></div><div id="sms-schedules-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-organization-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">班级与子域</h1><div class="section__tools"><button type="button" id="sms-create-class" class="primary rounded button" hidden>＋ 新建班级与子域</button></div></div>
       <div class="section__body"><form id="sms-class-search-form" class="sms-org-toolbar"><input id="sms-class-query" type="search" class="textbox" placeholder="搜索名称或子域 ID" aria-label="搜索班级与子域"><select id="sms-class-status" class="select" aria-label="筛选班级状态"><option value="">全部状态</option><option value="active">开班中</option><option value="archived">已归档</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-class-summary" class="help-text"></p></div>
@@ -68,6 +70,8 @@
     <section class="section side visible"><div class="section__header"><h1 class="section__title">学生管理</h1></div><ol class="menu">
       <li class="menu__item"><button type="button" class="menu__link sms-nav active" data-tab="students"><span class="icon icon-user"></span> 学生档案</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="rating"><span class="icon icon-pie-chart" aria-hidden="true"></span> Rating</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="courses"><span class="icon icon-book"></span> 课程管理</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="schedules"><span class="icon icon-schedule"></span> 排课管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="organization"><span class="icon icon-web" aria-hidden="true"></span> 班级与子域</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="accounts" id="sms-accounts-nav" hidden><span class="icon icon-account--circle" aria-hidden="true"></span> 账户管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
@@ -90,11 +94,11 @@
     <form id="sms-account-form"><header class="section__header sms-dialog-header"><h1 id="sms-account-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-account-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-account-error" class="help-text" role="alert"></p><div id="sms-account-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-account-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-account-save">确认保存</button></div></footer></form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?build=teaching-20261021" defer></script>
-<script src="/sms-addon/organization.js?build=teaching-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=teaching-redesign-20261021" defer></script>
+<script src="/sms-addon/organization.js?build=teaching-redesign-20261021" defer></script>
 <script src="/sms-addon/accounts.js?build=profile-overview-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
 <script src="/sms-addon/rating.js?build=ranking-badges-20261021" defer></script>
-<link rel="stylesheet" href="/sms-addon/teaching.css?build=teaching-20261021">
-<script src="/sms-addon/teaching.js?build=teaching-dates-20261021" defer></script>
+<link rel="stylesheet" href="/sms-addon/teaching.css?build=teaching-redesign-20261021">
+<script src="/sms-addon/teaching.js?build=teaching-redesign-20261021" defer></script>
 {% endblock %}
