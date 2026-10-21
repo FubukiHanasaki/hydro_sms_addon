@@ -14,7 +14,7 @@ export function disableNativeDomainManagement(ctx: Context) {
   ctx.on('handler/before-prepare/HomeDomain', async handler => {
     if (handler.context.method !== 'GET') throw new ForbiddenError();
     handler.response.addHeader('Cache-Control', 'private, no-store');
-    handler.response.redirect = `${handler.url('sms_panel')}#domains`;
+    handler.response.redirect = `${handler.url('sms_panel')}#organization`;
     return 'cleanup';
   });
   // Hydro also exposes group writes through its generic API executor.

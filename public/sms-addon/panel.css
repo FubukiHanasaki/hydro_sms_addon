@@ -254,3 +254,40 @@
 .sms-shell .sms-org-results .checkbox { margin-bottom: 0 !important; }
 .sms-org-value { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 12px; }
 @media (max-width: 767px) { .sms-org-toolbar { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); } .sms-org-toolbar > .textbox { grid-column: 1 / -1; } }
+/* Organization dialogs keep navigation outside the scrolling body. */
+.sms-shell .sms-org-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.sms-shell .sms-org-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0; }
+.sms-shell .sms-org-pagination .help-text { margin: 0; white-space: nowrap; }
+.sms-shell .sms-org-pagination .button { margin: 0; }
+.sms-shell .sms-org-footer > .sms-org-pagination { margin-left: 0; }
+.sms-shell .sms-org-footer > .sms-org-footer-actions { margin-left: auto; }
+.sms-shell .sms-members-dialog { height: min(720px, calc(100dvh - 40px)); }
+.sms-members-dialog > form { height: 100%; }
+.sms-members-dialog .sms-dialog-body { flex: 1; }
+.sms-member-toolbar { display: flex; align-items: end; gap: 12px; }
+.sms-member-toolbar > label { flex: 1; min-width: 0; }
+.sms-member-toolbar > .button { margin-bottom: 16px; }
+.sms-member-add { display: grid; grid-template-columns: minmax(0, 1fr) 160px; gap: 0 16px; margin-bottom: 12px; }
+.sms-member-add .sms-account-results { grid-column: 1 / -1; margin-bottom: 0; }
+.sms-member-list { min-width: 0; }
+.sms-member-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 90px; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,.2); }
+.sms-member-person { min-width: 0; overflow-wrap: anywhere; }
+.sms-member-kind { font-size: .85em; opacity: .75; }
+.sms-member-actions { text-align: right; }
+.sms-member-actions .button { margin: 0; min-width: 72px; padding-left: 16px; padding-right: 16px; }
+.sms-member-actions .help-text { margin: 0; }
+.sms-shell #sms-org-fields .sms-field > .textbox, .sms-shell #sms-org-fields .sms-field > .select { width: 100% !important; max-width: 100%; }
+@media (max-width: 767px) {
+  .sms-shell .sms-org-footer { flex-wrap: wrap; gap: 12px; }
+  .sms-shell .sms-org-footer > .sms-org-pagination { width: 100%; justify-content: space-between; }
+  .sms-shell .sms-members-dialog { height: calc(100dvh - 20px); }
+  .sms-member-add { grid-template-columns: minmax(0,1fr); }
+  .sms-member-row { grid-template-columns: minmax(0,1fr) 68px 68px; gap: 8px; }
+  .sms-member-actions .button { min-width: 60px; padding-left: 12px; padding-right: 12px; }
+}
+.sms-shell #sms-org-fields .sms-field { min-width: 0; max-width: none; }
+.sms-shell #sms-org-fields .sms-field > .textbox,
+.sms-shell #sms-org-fields .sms-field > .select { box-sizing: border-box; height: 36px; }
+.sms-shell #sms-org-fields .sms-field > textarea.textbox { height: 110px; }
+.sms-member-person .sms-student-name { line-height: 1.5; }
+.sms-member-person .sms-secondary { line-height: 1.4; margin-top: 2px; }

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Db, Filter } from 'mongodb';
+import type { Db, Document } from 'mongodb';
 import { StudentService } from './service';
-import { SmsError, Student } from './types';
-import { object, positiveInt, text } from './validation';
+import { SmsError } from './types';
+import { object, text } from './validation';
 
 export interface DomainGateway {
   create(id: string, owner: number, name: string, bulletin: string): Promise<unknown>;
@@ -10,114 +10,169 @@ export interface DomainGateway {
   join(id: string, uid: number, joined: boolean): Promise<unknown>;
 }
 interface ClassDoc {
-  _id: string; domainId: string; name: string; type: string; academicYear: string;
-  schedule: string; location: string; description: string; status: 'active' | 'archived';
-  teacherUids: number[]; studentIds: string[]; version: number;
-  createdAt: Date; updatedAt: Date; updatedBy: number;
+  _id: string; domainId: string; type: string; academicYear: string; schedule: string;
+  location: string; status: 'active' | 'archived'; teacherUids: number[]; version: number;
+  updatedAt: Date; updatedBy: number; syncState?: 'pending' | 'failed' | 'ready';
 }
 interface DomainDoc { _id: string; name?: string; bulletin?: string; owner: number }
 export class OrganizationService {
   constructor(private db: Db, private students: StudentService, private host: DomainGateway) {}
   get classes() { return this.db.collection<ClassDoc>('sms_classes'); }
   get domains() { return this.db.collection<DomainDoc>('domain'); }
-  async init() { await this.classes.createIndex({ domainId: 1, updatedAt: -1 }); await this.classes.createIndex({ teacherUids: 1 }); await this.classes.createIndex({ studentIds: 1 }); }
-  async scope(uid: number) {
+  async init() {
+    // Refuse ambiguous legacy relationships rather than silently choosing a class.
+    const duplicate = await this.classes.aggregate([{ $group: { _id: '$domainId', n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }, { $limit: 1 }]).next();
+    if (duplicate) throw new Error(`班级与子域需要一对一关联，请先核对重复子域：${duplicate._id}`);
+    await this.classes.createIndex({ domainId: 1 }, { unique: true });
+    await this.classes.createIndex({ teacherUids: 1 });
+  }
+  async metadata(id: string) { return this.classes.findOne({ $or: [{ _id: id }, { domainId: id }] }); }
+  async domain(id: string) { const row = await this.domains.findOne({ _id: id }); if (!row) throw new SmsError(404, '班级与子域不存在'); return row; }
+  async joined(id: string, uid: number) { return !!await this.db.collection('domain.user').findOne({ domainId: id, uid, join: true }); }
+  async access(uid: number, domain: DomainDoc, metadata: ClassDoc | null) {
     const me = await this.students.me(uid);
-    return { me, filter: me.admin ? {} : { $or: [{ teacherUids: uid }, { studentIds: me.boundStudentId ?? '' }] } };
+    const joined = uid > 0 && await this.joined(domain._id, uid);
+    const teacher = joined && !!metadata?.teacherUids.includes(uid);
+    if (!me.admin && !teacher && !(joined && me.boundStudentId)) throw new SmsError(404, '班级与子域不存在或无权查看');
+    return { me, staff: me.admin || teacher };
+  }
+  async allowedDomains(uid: number) {
+    const me = await this.students.me(uid); if (me.admin) return null;
+    const joined: string[] = await this.db.collection('domain.user').distinct('domainId', { uid, join: true });
+    if (me.boundStudentId) return joined;
+    const taught = await this.classes.distinct('domainId', { teacherUids: uid });
+    return joined.filter(id => taught.includes(id));
   }
   async domainList(uid: number) {
-    const { me, filter } = await this.scope(uid);
-    const ids = me.admin ? null : [...new Set([
-      ...await this.classes.distinct('domainId', filter),
-      ...await this.db.collection('domain.user').distinct('domainId', { uid, join: true }),
-    ])];
-    return this.domains.find(ids ? { _id: { $in: ids } } : {}).project({ _id: 1, name: 1, ...(me.admin ? { bulletin: 1, owner: 1 } : {}) }).sort({ _id: 1 }).toArray();
+    const ids = await this.allowedDomains(uid);
+    return this.domains.find(ids ? { _id: { $in: ids } } : {}).project({ _id: 1, name: 1 }).sort({ _id: 1 }).toArray();
   }
-  async domainSave(uid: number, value: unknown) {
-    await this.students.requireAdmin(uid);
-    const input = object(value); this.fields(input, ['action', 'id', 'name', 'bulletin']);
-    const id = text(input.id, 64, '子域 ID').toLowerCase();
-    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
-    if (!['create', 'update'].includes(String(input.action))) throw new SmsError(400, '子域操作无效');
-    const name = text(input.name, 100, '子域名称'); const bulletin = text(input.bulletin ?? '', 5000, '子域公告');
-    if (!name) throw new SmsError(400, '子域名称不能为空');
-    const exists = await this.domains.findOne({ _id: id });
-    if (input.action === 'create' && exists) throw new SmsError(409, '子域 ID 已存在');
-    if (input.action === 'update' && !exists) throw new SmsError(404, '子域不存在');
-    return this.students.mutation(uid, `domains.${input.action}`, id, ['name', 'bulletin'], async () => {
-      try { if (input.action === 'create') await this.host.create(id, uid, name, bulletin); else await this.host.edit(id, { name, bulletin }); }
-      catch (e) { if ((e as { code?: number }).code === 11000) throw new SmsError(409, '子域 ID 已存在'); throw e; }
-      return { id };
-    });
-  }
-  async domainMembers(uid: number, id: string, query: unknown, pageValue: unknown) {
-    await this.students.requireAdmin(uid); await this.domain(id);
-    const q = text(query ?? '', 80, '搜索词'); const page = Number(pageValue ?? 1);
-    if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
-    const match = q ? { $or: [{ 'user.uname': { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } : {};
-    const [result] = await this.db.collection('domain.user').aggregate([
-      { $match: { domainId: id, join: true } },
-      { $lookup: { from: 'user', localField: 'uid', foreignField: '_id', as: 'user' } }, { $unwind: '$user' }, { $match: match },
-      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, role: 1, username: '$user.uname' } }] } },
-    ]).toArray();
-    return { total: result?.count[0]?.total ?? 0, members: result?.members ?? [], page };
-  }
-  async domainMembership(uid: number, id: string, value: unknown) {
-    await this.students.requireAdmin(uid); const domain = await this.domain(id);
-    const input = object(value); this.fields(input, ['uid', 'joined']);
-    const target = await this.students.assertUser(input.uid);
-    if (!target || typeof input.joined !== 'boolean') throw new SmsError(400, '请指定有效账号与加入状态');
-    if (!input.joined && target === domain.owner) throw new SmsError(400, '不能移除子域所有者');
-    return this.students.mutation(uid, input.joined ? 'domains.join' : 'domains.leave', id, ['uid', 'joined'], async () => {
-      await this.host.join(id, target, input.joined as boolean); return { uid: target, joined: input.joined };
-    });
-  }
-  async domain(id: string) { const row = await this.domains.findOne({ _id: id }); if (!row) throw new SmsError(404, '子域不存在'); return row; }
   async classList(uid: number, query: unknown, domainValue: unknown, statusValue: unknown, pageValue: unknown) {
-    const { me, filter } = await this.scope(uid);
     const q = text(query ?? '', 80, '搜索词'); const domainId = text(domainValue ?? '', 64, '子域');
-    const status = text(statusValue ?? '', 10, '班级状态'); const page = Number(pageValue ?? 1);
-    if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
-    if (status && !['active', 'archived'].includes(status)) throw new SmsError(400, '班级状态无效');
-    const where: Filter<ClassDoc> = { $and: [filter, ...(domainId ? [{ domainId }] : []), ...(status ? [{ status: status as ClassDoc['status'] }] : []), ...(q ? [{ name: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }] : [])] };
-    const [total, rows] = await Promise.all([this.classes.countDocuments(where), this.classes.find(where).sort({ updatedAt: -1, _id: 1 }).skip((page - 1) * 20).limit(20).toArray()]);
-    return { total, page, classes: rows.map((r) => this.classView(r, me.admin || r.teacherUids.includes(uid))) };
-  }
-  classView(row: ClassDoc, staff: boolean) {
-    const { studentIds, teacherUids, ...rest } = row;
-    return { ...rest, teacherUids, ...(staff ? { studentIds, studentCount: studentIds.length } : {}) };
+    const status = text(statusValue ?? '', 10, '状态'); const page = this.page(pageValue);
+    if (status && !['active', 'archived'].includes(status)) throw new SmsError(400, '状态无效');
+    const allowed = await this.allowedDomains(uid); const me = await this.students.me(uid);
+    const conditions: Record<string, unknown>[] = [];
+    if (allowed) conditions.push({ _id: { $in: allowed } });
+    if (domainId) conditions.push({ _id: domainId });
+    if (q) conditions.push({ $or: [{ name: { $regex: this.pattern(q), $options: 'i' } }, { _id: { $regex: this.pattern(q), $options: 'i' } }] });
+    const [result] = await this.domains.aggregate([
+      { $match: conditions.length ? { $and: conditions } : {} },
+      { $lookup: { from: 'sms_classes', localField: '_id', foreignField: 'domainId', as: 'metadata' } },
+      { $set: { status: { $ifNull: [{ $first: '$metadata.status' }, 'active'] } } },
+      ...status ? [{ $match: { status } }] : [],
+      { $facet: { count: [{ $count: 'total' }], rows: [{ $sort: { _id: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 1, name: 1, status: 1, metadata: 1 } }] } },
+    ]).toArray();
+    const classes = await Promise.all((result?.rows ?? []).map(async (row: Document) => {
+      const meta = row.metadata[0] as ClassDoc | undefined;
+      const staff = me.admin || (!!meta?.teacherUids.includes(uid) && await this.joined(row._id, uid));
+      return { _id: row._id, domainId: row._id, name: row.name || row._id, type: meta?.type || '', academicYear: meta?.academicYear || '', status: row.status, version: meta?.version ?? 0, ...(staff ? { memberCount: await this.db.collection('domain.user').countDocuments({ domainId: row._id, uid: { $gt: 0 }, join: true }) } : {}) };
+    }));
+    return { total: result?.count[0]?.total ?? 0, page, classes };
   }
   async classDetail(uid: number, id: string) {
-    const { me, filter } = await this.scope(uid);
-    const row = await this.classes.findOne({ $and: [{ _id: id }, filter] });
-    if (!row) throw new SmsError(404, '班级不存在或无权查看');
-    const staff = me.admin || row.teacherUids.includes(uid);
-    const members = await this.db.collection<Student>('sms_students').find({ _id: { $in: staff ? row.studentIds : [me.boundStudentId ?? ''] } }).project({ 'basic.name': 1, 'basic.grade': 1, 'basic.school': 1, hydroUid: 1 }).toArray();
-    const teachers = await this.db.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: row.teacherUids } }).project({ uname: 1 }).toArray();
-    return { ...this.classView(row, staff), canEdit: me.admin, students: members.map(s => ({ id: s._id, name: s.basic.name, grade: s.basic.grade, school: s.basic.school, hydroUid: s.hydroUid ?? null })), teachers: teachers.map(t => ({ uid: t._id, username: t.uname })) };
+    const metadata = await this.metadata(id); const domain = await this.domain(metadata?.domainId || id);
+    const { me, staff } = await this.access(uid, domain, metadata);
+    const memberships = await this.db.collection('domain.user').find({ domainId: domain._id, uid: { $gt: 0 }, join: true }).project({ uid: 1 }).toArray();
+    const uids = memberships.map(m => m.uid as number);
+    const teacherUids = (metadata?.teacherUids ?? []).filter(n => uids.includes(n));
+    const students = await this.students.students.find({ hydroUid: { $in: staff ? uids : [uid] } }).project({ 'basic.name': 1, 'basic.grade': 1, 'basic.school': 1, hydroUid: 1 }).toArray();
+    const teachers = await this.db.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: teacherUids } }).project({ uname: 1 }).toArray();
+    return {
+      _id: domain._id, domainId: domain._id, name: domain.name || domain._id, description: domain.bulletin || '',
+      type: metadata?.type || '', academicYear: metadata?.academicYear || '', schedule: metadata?.schedule || '', location: metadata?.location || '', status: metadata?.status || 'active',
+      version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: me.admin,
+      ...(me.admin ? { owner: domain.owner } : {}), ...(staff ? { memberCount: uids.length } : {}),
+      students: students.map(s => ({ id: s._id, name: s.basic.name, grade: s.basic.grade, school: s.basic.school, hydroUid: s.hydroUid })),
+      teachers: teachers.map(t => ({ uid: t._id, username: t.uname })),
+    };
+  }
+  // A lease serializes plugin operations across workers. An interrupted process
+  // releases its lock after two minutes; every host write verifies ownership.
+  async locked<T>(id: string, work: (verify: () => Promise<void>) => Promise<T>) {
+    const locks = this.db.collection<{ _id: string; token: string; expiresAt: Date }>('sms_org_locks'); const token = randomUUID();
+    const expires = () => new Date(Date.now() + 120000);
+    try { await locks.findOneAndUpdate({ _id: id, expiresAt: { $lte: new Date() } }, { $set: { token, expiresAt: expires() } }, { upsert: true }); }
+    catch (e) { if ((e as { code?: number }).code === 11000) throw new SmsError(409, '班级与子域正在更新，请稍后重试'); throw e; }
+    const verify = async () => { const r = await locks.updateOne({ _id: id, token, expiresAt: { $gt: new Date() } }, { $set: { expiresAt: expires() } }); if (!r.matchedCount) throw new SmsError(409, '更新锁已失效，请刷新后重试'); };
+    try { return await work(verify); } finally { await locks.deleteOne({ _id: id, token }); }
   }
   async classSave(uid: number, id: string | null, value: unknown) {
     await this.students.requireAdmin(uid); const input = object(value);
-    this.fields(input, ['domainId', 'name', 'type', 'academicYear', 'schedule', 'location', 'description', 'status', 'teacherUids', 'studentIds', 'version']);
-    const data = { domainId: text(input.domainId, 64, '子域'), name: text(input.name, 100, '班级名称'), type: text(input.type ?? '', 80, '班型'), academicYear: text(input.academicYear ?? '', 80, '学年'), schedule: text(input.schedule ?? '', 200, '上课安排'), location: text(input.location ?? '', 200, '上课地点'), description: text(input.description ?? '', 2000, '班级说明'), status: input.status as ClassDoc['status'], teacherUids: this.ids(input.teacherUids, true) as number[], studentIds: this.ids(input.studentIds, false) as string[] };
-    if (!data.name || !['active', 'archived'].includes(data.status)) throw new SmsError(400, '请填写班级名称并选择有效状态');
-    await this.domain(data.domainId);
-    if (await this.students.students.countDocuments({ _id: { $in: data.studentIds } }) !== data.studentIds.length) throw new SmsError(400, '部分学生档案不存在');
-    if (await this.db.collection('user').countDocuments({ _id: { $in: data.teacherUids } as never }) !== data.teacherUids.length) throw new SmsError(400, '部分教师账号不存在');
-    const now = new Date(); const key = id ?? randomUUID();
-    return this.students.mutation(uid, id ? 'classes.update' : 'classes.create', key, Object.keys(data), async () => {
-      if (!id) await this.classes.insertOne({ _id: key, ...data, version: 1, createdAt: now, updatedAt: now, updatedBy: uid });
-      else {
-        const version = positiveInt(input.version, '版本');
-        const result = await this.classes.updateOne({ _id: id, version }, { $set: { ...data, updatedAt: now, updatedBy: uid }, $inc: { version: 1 } });
-        if (!result.matchedCount) throw new SmsError(409, '班级已变更或不存在，请重新打开后修改');
-      }
-      return this.classDetail(uid, key);
+    this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain']);
+    const domainId = text(input.domainId, 64, '子域 ID').toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(domainId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
+    const name = text(input.name, 100, '名称'); const description = text(input.description ?? '', 5000, '说明');
+    const data = { type: text(input.type ?? '', 80, '班型'), academicYear: text(input.academicYear ?? '', 80, '学年'), schedule: text(input.schedule ?? '', 200, '上课安排'), location: text(input.location ?? '', 200, '地点'), status: input.status as ClassDoc['status'] };
+    if (!name || !['active', 'archived'].includes(data.status)) throw new SmsError(400, '请填写名称并选择有效状态');
+    if (input.createDomain !== undefined && typeof input.createDomain !== 'boolean') throw new SmsError(400, '创建标识无效');
+    const version = input.version ?? 0; if (!Number.isSafeInteger(version) || (version as number) < 0) throw new SmsError(400, '版本无效');
+    return this.locked(domainId, async verify => {
+      const previous = await this.metadata(id || domainId);
+      if (previous && previous.domainId !== domainId) throw new SmsError(400, '不能修改已关联的子域 ID');
+      if (id && !previous && id !== domainId) throw new SmsError(404, '班级与子域不存在');
+      const domain = await this.domains.findOne({ _id: domainId });
+      const recoverCreation = !domain && input.createDomain && version === 0 && previous?.syncState !== 'ready';
+      if ((previous?.version ?? 0) !== version && !recoverCreation) throw new SmsError(409, '资料已更新，请重新打开后修改');
+      if (input.createDomain && domain) throw new SmsError(409, '子域 ID 已存在，请直接编辑已有班级与子域');
+      if (!domain && !input.createDomain) throw new SmsError(404, '子域不存在');
+      return this.students.mutation(uid, input.createDomain ? 'classes.create' : 'classes.update', domainId, ['name', 'description', ...Object.keys(data)], async () => {
+        const key = previous?._id || domainId;
+        await this.classes.updateOne({ _id: key }, { $set: { domainId, ...data, updatedAt: new Date(), updatedBy: uid, syncState: 'pending' }, $setOnInsert: { teacherUids: [] }, $inc: { version: 1 } }, { upsert: true });
+        try {
+          await verify();
+          if (domain) await this.host.edit(domainId, { name, bulletin: description }); else await this.host.create(domainId, uid, name, description);
+          await this.classes.updateOne({ _id: key }, { $set: { syncState: 'ready' } });
+        } catch (e) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw e; }
+        return this.classDetail(uid, domainId);
+      });
     });
   }
-  ids(value: unknown, numeric: boolean) {
-    if (!Array.isArray(value) || value.length > 1000) throw new SmsError(400, '成员列表无效或超过 1000 人');
-    return [...new Set(value.map(v => numeric ? positiveInt(v, '教师 UID') : text(v, 64, '学生 ID')))];
+  async domainSave(uid: number, value: unknown) {
+    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['action', 'id', 'name', 'bulletin', 'version']);
+    if (!['create', 'update'].includes(String(input.action))) throw new SmsError(400, '操作无效');
+    const id = text(input.id, 64, '子域 ID').toLowerCase(); const meta = await this.metadata(id);
+    // Compatibility endpoint uses the same save path; updates require a revision.
+    if (input.action === 'update' && input.version === undefined) throw new SmsError(400, '更新需要版本号');
+    return this.classSave(uid, input.action === 'create' ? null : id, { domainId: id, name: input.name, description: input.bulletin, type: meta?.type || '', academicYear: meta?.academicYear || '', schedule: meta?.schedule || '', location: meta?.location || '', status: meta?.status || 'active', version: input.version ?? 0, createDomain: input.action === 'create' });
   }
+  async domainMembers(uid: number, id: string, query: unknown, pageValue: unknown) {
+    const meta = await this.metadata(id); const domain = await this.domain(meta?.domainId || id); const { me, staff } = await this.access(uid, domain, meta);
+    const q = text(query ?? '', 80, '搜索词'); const page = this.page(pageValue);
+    const teachers = meta?.teacherUids ?? [];
+    const [result] = await this.db.collection('domain.user').aggregate([
+      { $match: { domainId: domain._id, join: true, uid: staff ? { $gt: 0 } : uid } },
+      { $lookup: { from: 'user', localField: 'uid', foreignField: '_id', as: 'user' } }, { $unwind: '$user' },
+      { $lookup: { from: 'sms_students', localField: 'uid', foreignField: 'hydroUid', pipeline: [{ $project: { 'basic.name': 1 } }], as: 'student' } },
+      ...q ? [{ $match: { $or: [{ 'user.uname': { $regex: this.pattern(q), $options: 'i' } }, { 'student.basic.name': { $regex: this.pattern(q), $options: 'i' } }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } }] : [],
+      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [me.admin, { $ne: ['$uid', domain.owner] }] } } }] } },
+    ]).toArray();
+    return { total: result?.count[0]?.total ?? 0, members: result?.members ?? [], page, pageSize: 20, version: meta?.version ?? 0, canManage: me.admin };
+  }
+  async domainMembership(uid: number, id: string, value: unknown) {
+    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['uid', 'joined', 'kind', 'version']);
+    const target = await this.students.assertUser(input.uid); if (!target || typeof input.joined !== 'boolean') throw new SmsError(400, '请指定有效账号与加入状态');
+    const kind = input.kind ?? 'member'; if (!['member', 'teacher', 'student'].includes(String(kind))) throw new SmsError(400, '成员身份无效');
+    if (kind === 'student' && !await this.students.students.findOne({ hydroUid: target })) throw new SmsError(400, '该账号尚未绑定学生档案，请先创建或绑定学生');
+    if (!Number.isSafeInteger(input.version) || (input.version as number) < 0) throw new SmsError(400, '成员修改需要有效版本号');
+    const initial = await this.metadata(id); const domainId = initial?.domainId || id;
+    return this.locked(domainId, async verify => {
+      const domain = await this.domain(domainId); const meta = await this.metadata(domainId);
+      if ((meta?.version ?? 0) !== input.version) throw new SmsError(409, '成员或资料已更新，请刷新名册后重试');
+      if (!input.joined && target === domain.owner) throw new SmsError(400, '不能移除班级与子域的所有者');
+      return this.students.mutation(uid, input.joined ? 'domains.join' : 'domains.leave', `${domainId}/${target}`, ['uid', 'joined', 'kind'], async () => {
+        const key = meta?._id || domainId;
+        await this.classes.updateOne({ _id: key }, { $set: { domainId, updatedAt: new Date(), updatedBy: uid, syncState: 'pending' }, $setOnInsert: { type: '', academicYear: '', schedule: '', location: '', status: 'active', teacherUids: [] }, $inc: { version: 1 } }, { upsert: true });
+        try {
+          await verify(); await this.host.join(domainId, target, input.joined as boolean);
+          const teacherUids = new Set(meta?.teacherUids ?? []); if (input.joined && kind === 'teacher') teacherUids.add(target); else teacherUids.delete(target);
+          await this.classes.updateOne({ _id: key }, { $set: { teacherUids: [...teacherUids], syncState: 'ready' } });
+        } catch (e) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw e; }
+        return { uid: target, joined: input.joined, version: (meta?.version ?? 0) + 1 };
+      });
+    });
+  }
+  page(value: unknown) { const page = Number(value ?? 1); if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效'); return page; }
+  pattern(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   fields(input: Record<string, unknown>, keys: string[]) { if (Object.keys(input).some(k => !keys.includes(k))) throw new SmsError(400, '请求包含未知字段'); }
 }

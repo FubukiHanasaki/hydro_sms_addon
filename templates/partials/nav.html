@@ -50,7 +50,7 @@
           <li class="menu__seperator"></li>
           {%- endif -%}
           <li class="menu__item">
-            <a href="{{ url('sms_panel') + '#domains' }}" class="menu__link">
+            <a href="{{ url('sms_panel') + '#organization' }}" class="menu__link">
               <span class="icon icon-wrench"></span> {{ _('Manage') }}
             </a>
           </li>
@@ -94,8 +94,8 @@
           </li>
           <li class="menu__seperator"></li>
           <li class="menu__item">
-            <a href="{{ url('sms_panel') + '#domains' }}" class="menu__link">
-              <span class="icon icon-web"></span> 子域管理
+            <a href="{{ url('sms_panel') + '#organization' }}" class="menu__link">
+              <span class="icon icon-web"></span> 班级与子域
             </a>
           </li>
           {% if handler.user.hasPriv(PRIV.PRIV_CREATE_FILE) %}

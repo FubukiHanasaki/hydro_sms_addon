@@ -7,7 +7,7 @@
     {{ sidemenu.render_item('comment--multiple', 'home_messages') }}
     <li class="menu__seperator"></li>
     {{ sidemenu.render_item('web', 'home_settings', {category:'domain'}, label='Domain Settings', menu_item='home_domain') }}
-    {{ sidemenu.render_item('web', 'sms_panel', label='子域管理', memu_item='sms_panel') }}
+    {{ sidemenu.render_item('web', 'sms_panel', label='班级与子域', memu_item='sms_panel') }}
     {% if handler.user.hasPriv(PRIV.PRIV_CREATE_FILE) %}
       <li class="menu__seperator"></li>
       {{ sidemenu.render_item('file', 'home_files', label='My Files') }}

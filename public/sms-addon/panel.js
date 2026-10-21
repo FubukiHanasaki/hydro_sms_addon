@@ -299,9 +299,9 @@
   }
   async function switchTab(tab) {
     state.tab = tab; notice('');
-    for (const name of ['students', 'permissions', 'audit', 'domains', 'classes']) $(`sms-${name}-section`).hidden = name !== tab;
+    for (const name of ['students', 'permissions', 'audit', 'organization']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
-    try { if (tab === 'domains' || tab === 'classes') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
+    try { if (tab === 'organization') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
     catch (error) { notice(error.message, true); }
   }
   $('sms-search-form').addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; notice(''); loadStudents(); });
@@ -318,7 +318,7 @@
   let scopeTimer; $('sms-scope-search').addEventListener('input', () => { clearTimeout(scopeTimer); scopeTimer = setTimeout(() => loadScope().catch((error) => notice(error.message, true)), 250); });
   $('sms-refresh-audit').addEventListener('click', () => loadAudit().catch((error) => notice(error.message, true)));
   document.querySelectorAll('.sms-nav').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
-  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes'].includes(location.hash.slice(1))) switchTab(location.hash.slice(1)); });
+  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes', 'organization'].includes(location.hash.slice(1))) switchTab('organization'); });
   (async () => {
     try {
       state.me = await api(app.dataset.me);
@@ -328,7 +328,7 @@
       app.dispatchEvent(new CustomEvent('sms:ready', { detail: state.me }));
       await loadFilterOptions();
       await loadStudents();
-      if (['domains', 'classes'].includes(location.hash.slice(1))) await switchTab(location.hash.slice(1));
+      if (['domains', 'classes', 'organization'].includes(location.hash.slice(1))) await switchTab('organization');
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();
 })();
