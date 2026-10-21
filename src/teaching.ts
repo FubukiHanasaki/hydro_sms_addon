@@ -22,7 +22,8 @@ export class TeachingService extends TeachingPlanner {
     const classes = visible.map(c => ({ id: c._id, name: c.name || c._id, teacherUids: (metadata.find(m => m.domainId === c._id)?.teacherUids ?? []).filter(uid => memberships.some(m => m.domainId === c._id && m.uid === uid)) }));
     const lessons = (await Promise.all(ids.map(id => this.instances(id, dates.from, dates.to)))).flat();
     const uids = [...new Set([...classes.flatMap(c => c.teacherUids), ...plans.flatMap(p => p.revisions.map(r => r.teacherUid)), ...lessons.map(l => l.teacherUid)])];
-    const teachers = (await this.store.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: uids } }).project({ uname: 1 }).sort({ uname: 1 }).toArray()).map(u => ({ uid: u._id, username: u.uname }));
+    const profiles = await this.store.collection('sms_teachers').find({ hydroUid: { $in: uids } }, { projection: { hydroUid: 1, 'basic.name': 1 } }).toArray();
+    const teachers = (await this.store.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: uids } }).project({ uname: 1 }).sort({ uname: 1 }).toArray()).map(u => ({ uid: u._id, username: u.uname, name: profiles.find(p => p.hydroUid === u._id)?.basic?.name || u.uname }));
     if (selected && !teachers.some(t => t.uid === Number(selected))) throw new SmsError(403, '无权查看该教师的课表');
     const me = await this.studentService.me(actor);
     const className = (id: string) => classes.find(c => c.id === id)?.name || id;

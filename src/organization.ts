@@ -95,13 +95,14 @@ export class OrganizationService {
     const teacherUids = (metadata?.teacherUids ?? []).filter(n => uids.includes(n));
     const students = await this.students.students.find({ hydroUid: { $in: staff ? uids : [uid] } }).project({ 'basic.name': 1, 'basic.grade': 1, 'basic.school': 1, hydroUid: 1 }).toArray();
     const teachers = await this.db.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: teacherUids } }).project({ uname: 1 }).toArray();
+    const teacherProfiles = await this.db.collection('sms_teachers').find({ hydroUid: { $in: teacherUids } }, { projection: { hydroUid: 1, 'basic.name': 1 } }).toArray();
     return {
       _id: domain._id, domainId: domain._id, name: domain.name || domain._id, description: domain.bulletin || '',
       type: metadata?.type || '', academicYear: metadata?.academicYear || '', schedule: metadata?.schedule || '', location: metadata?.location || '', status: metadata?.status || 'active',
       version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: me.admin,
       ...(me.admin ? { owner: domain.owner } : {}), ...(staff ? { memberCount: uids.length } : {}),
       students: students.map(s => ({ id: s._id, name: s.basic.name, grade: s.basic.grade, school: s.basic.school, hydroUid: s.hydroUid })),
-      teachers: teachers.map(t => ({ uid: t._id, username: t.uname })),
+      teachers: teachers.map(t => ({ uid: t._id, username: t.uname, name: teacherProfiles.find(p => p.hydroUid === t._id)?.basic?.name || t.uname })),
     };
   }
   // A lease serializes plugin operations across workers. An interrupted process

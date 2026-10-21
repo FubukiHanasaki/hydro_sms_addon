@@ -1,3 +1,4 @@
+import { TeacherService } from './src/teachers';
 import { TeachingService } from './src/teaching';
 import { RatingService } from './src/rating';
 import { hydroContestGateway, installRating } from './src/rating-hydro';
@@ -20,6 +21,8 @@ export async function apply(ctx: Context) {
     join: (id, uid, joined) => DomainModel.setJoin(id, uid, joined),
   });
   await organization.init();
+  const teachers = new TeacherService(ctx.db.db, service, organization);
+  await teachers.init();
   const accounts = new AccountManagement(ctx.db.db, service, {
     create: (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT),
     rename: (uid, username) => UserModel.setUname(uid, username), password: (uid, password) => UserModel.setPassword(uid, password),
@@ -146,6 +149,16 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => organization.classDetail(this.user._id, this.context.params.id)); }
     async post() { await this.run(() => organization.classSave(this.user._id, this.context.params.id, this.body())); }
   }
+  class SmsTeachersHandler extends SmsApiHandler {
+    async get() { await this.run(() => teachers.list(this.user._id, this.context.query.q, this.context.query.status, this.context.query.page)); }
+    async post() { await this.run(() => teachers.save(this.user._id, this.body())); }
+  }
+  class SmsTeacherHandler extends SmsApiHandler {
+    async get() { await this.run(() => teachers.detail(this.user._id, this.context.params.id)); }
+    async post() { await this.run(() => teachers.save(this.user._id, this.body(), this.context.params.id)); }
+  }
+  ctx.Route('sms_api_teachers', '/sms/api/teachers', SmsTeachersHandler);
+  ctx.Route('sms_api_teacher', '/sms/api/teachers/:id', SmsTeacherHandler);
   class SmsScheduleBoardHandler extends SmsApiHandler {
     async get() { await this.run(() => teaching.scheduleBoard(this.user._id, this.context.query.teacherUid, this.context.query.from, this.context.query.to)); }
   }
