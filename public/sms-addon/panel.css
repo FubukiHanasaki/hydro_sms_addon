@@ -201,3 +201,11 @@
     max-height: calc(100dvh - 20px);
   }
 }
+.sms-grant-item > div:last-child {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+}
+.sms-scope-options .checkbox {
+  width: 100%;
+}

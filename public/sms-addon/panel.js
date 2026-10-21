@@ -201,7 +201,7 @@
     const options = $('sms-scope-options'); options.replaceChildren();
     for (const student of result.students) {
       if (state.selected.has(student.id)) state.selected.set(student.id, student.name);
-      const label = element('label', 'checkbox'); const checkbox = element('input', 'checkbox__input'); checkbox.type = 'checkbox'; checkbox.dataset.studentId = student.id; checkbox.checked = state.selected.has(student.id);
+      const label = element('label', 'checkbox'); const checkbox = element('input', 'checkbox'); checkbox.type = 'checkbox'; checkbox.dataset.studentId = student.id; checkbox.checked = state.selected.has(student.id);
       checkbox.addEventListener('change', () => { if (checkbox.checked) state.selected.set(student.id, student.name); else state.selected.delete(student.id); renderChips(); });
       label.append(checkbox, document.createTextNode(`${student.name} · ${student.studentNo || '未填写学号'}`)); options.append(label);
     }
