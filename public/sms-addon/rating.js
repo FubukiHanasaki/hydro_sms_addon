@@ -155,13 +155,16 @@
         return;
     let me, page = 1, request = 0, boardStats;
     async function board() {
-        const serial = ++request, url = new URL(app.dataset.rating, location.origin), domain = $('sms-rating-domain').value;
-        if (domain)
-            url.pathname = `/d/${encodeURIComponent(domain)}/sms/api/rating/board`;
-        url.search = new URLSearchParams({ q: $('sms-rating-query').value, mode: $('sms-rating-mode').value, page, grade: $('sms-rating-grade').value, school: $('sms-rating-school').value });
+        const serial = ++request, url = new URL(app.dataset.rating, location.origin);
+        url.search = new URLSearchParams({ q: $('sms-rating-query').value, mode: $('sms-rating-mode').value, page, grade: $('sms-rating-grade').value, school: $('sms-rating-school').value, classId: $('sms-rating-class').value });
         const data = await api(url);
         if (serial !== request)
             return;
+        const classes = $('sms-rating-class');
+        const all = el('option', '', data.classScope.label); all.value = '';
+        classes.replaceChildren(all);
+        for (const c of data.classScope.classes) { const option = el('option', '', c.name || c._id); option.value = c._id; classes.append(option); }
+        classes.value = data.classScope.selected;
         boardStats = data.stats;
         const rows = $('sms-rating-rows');
         rows.replaceChildren();
@@ -190,11 +193,9 @@
         $('sms-rating-prev').disabled = page <= 1;
         $('sms-rating-next').disabled = page * 20 >= data.total;
     }
-    function syncFilters() { for (const [target, source] of [['grade', 'grade'], ['school', 'school'], ['domain', 'domain']]) {
+    function syncFilters() { for (const [target, source] of [['grade', 'grade'], ['school', 'school']]) {
         const select = $(`sms-rating-${target}`), original = $(`sms-${source}`), current = select.value;
         select.replaceChildren(...Array.from(original.options).map(o => o.cloneNode(true)));
-        if (target === 'domain')
-            select.options[0].textContent = '当前子域';
         select.value = current;
     } }
     function parseImport(value) {
@@ -308,7 +309,7 @@
         t.body.append(row);
     } view.body.append(t.wrapper); });
     $('sms-rating-search').addEventListener('submit', e => { e.preventDefault(); page = 1; board().catch(error); });
-    for (const name of ['mode', 'domain', 'grade', 'school'])
+    for (const name of ['mode', 'class', 'grade', 'school'])
         $(`sms-rating-${name}`).addEventListener('change', () => { page = 1; board().catch(error); });
     $('sms-rating-prev').addEventListener('click', () => { page--; board().catch(error); });
     $('sms-rating-next').addEventListener('click', () => { page++; board().catch(error); });

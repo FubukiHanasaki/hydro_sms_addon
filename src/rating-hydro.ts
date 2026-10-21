@@ -1,7 +1,8 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { ObjectId } from 'mongodb';
-import { Context, ContestModel, PERM } from 'hydrooj';
+import { Context, ContestModel, PERM, ForbiddenError } from 'hydrooj';
 import { RatingService, ContestGateway } from './rating';
+import { OrganizationService } from './organization';
 import { SmsError } from './types';
 export function hydroContestGateway(ctx: Context): ContestGateway {
     return { async snapshot(domainId, contestId, difficulty) {
@@ -30,7 +31,7 @@ export function hydroContestGateway(ctx: Context): ContestGateway {
             return { key: `contest:${domainId}:${contestId}`, kind: 'contest', at: new Date(tdoc.endAt).toISOString(), domainId, contestId, title: tdoc.title, difficulty, penalty: tdoc.rule === 'acm', participants };
         } };
 }
-export function installRating(ctx: Context, rating: RatingService) {
+export function installRating(ctx: Context, rating: RatingService, organization: OrganizationService) {
     const decorate = async (u: any) => { if (!u || typeof u._id !== 'number')
         return; u.smsRating = await rating.summary(u._id); u.rp = u.smsRating.rating; u.level = 0; u.rank = null; };
     // The user/get event runs for a full Hydro user, while render dictionaries may
@@ -53,9 +54,12 @@ export function installRating(ctx: Context, rating: RatingService) {
     });
     ctx.on('handler/before/DomainRank', async (h) => {
         h.checkPerm(PERM.PERM_VIEW_RANKING);
-        const data = await rating.board(h.args.domainId || h.domain._id, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all');
+        let scope;
+        try { scope = await organization.ratingScope(h.user?._id ?? 0, h.args.domainId || h.domain._id, h.context.query.classId); }
+        catch (error) { if (error instanceof SmsError) throw new ForbiddenError(); throw error; }
+        const data = await rating.board(scope.domainId, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all');
         h.response.template = 'sms_ranking.html';
-        h.response.body = { smsBoard: data, smsRatingApi: h.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, '') };
+        h.response.body = { smsBoard: data, smsClassScope: scope, smsRatingApi: h.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, '') };
         h.response.addHeader('Cache-Control', 'private, no-store');
         return 'after';
     });

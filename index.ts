@@ -31,7 +31,7 @@ export async function apply(ctx: Context) {
   disableNativeDomainManagement(ctx);
   const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
   await rating.init();
-  installRating(ctx, rating);
+  installRating(ctx, rating, organization);
   UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
@@ -98,7 +98,7 @@ export async function apply(ctx: Context) {
   }
 
   class SmsRatingBoardHandler extends SmsApiHandler {
-    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.board(this.args.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school)); }
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.args.domainId, this.context.query.classId); return { ...await rating.board(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school), classScope: scope }; }); }
   }
   class SmsRatingHistoryHandler extends SmsApiHandler {
     async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.history(this.context.params.uid, this.context.query.page ?? 1)); }

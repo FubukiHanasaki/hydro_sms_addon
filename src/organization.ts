@@ -58,6 +58,12 @@ export class OrganizationService {
     const ids = await this.allowedDomains(uid);
     return this.domains.find(ids ? { _id: { $in: ids } } : {}).project({ _id: 1, name: 1 }).sort({ _id: 1 }).toArray();
   }
+  async ratingScope(uid: number, currentDomain: string, value: unknown) {
+    const selected = text(value ?? '', 64, '班级');
+    const classes = uid > 0 ? await this.domainList(uid) : await this.domains.find({ _id: currentDomain }).project({ _id: 1, name: 1 }).toArray();
+    if (selected && !classes.some(c => c._id === selected)) throw new SmsError(403, '无权查看该班级排行榜');
+    return { domainId: selected || currentDomain, selected, classes, label: currentDomain === 'system' ? '全部班级' : '当前班级' };
+  }
   async classList(uid: number, query: unknown, domainValue: unknown, statusValue: unknown, pageValue: unknown) {
     const q = text(query ?? '', 80, '搜索词'); const domainId = text(domainValue ?? '', 64, '子域');
     const status = text(statusValue ?? '', 10, '状态'); const page = this.page(pageValue);

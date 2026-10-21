@@ -79,4 +79,6 @@ uid,rating,recordedAt
 
 `sms_rating_head`指向唯一有效批次；`sms_rating_sources`、`sms_rating_summaries`、`sms_rating_changes` 保存每批的输入、用户投影和完整历史。新批次全部写完后，以数据库锁和版本比较原子切换头记录。中途失败、进程中断或并发冲突不会发布半成品；旧数据和导入检查点始终保留。历史批次作为恢复依据保留，不直接覆盖 Hydro 原版 RP 持久字段。插件启用时，显示与原版 RP 定时任务均由新系统接管。
 
-读接口：`GET /sms/api/rating/board?mode=all|recent&page=1&q=&grade=&school=`、`GET /sms/api/rating/users/<uid>?page=1`。当前域成员范围由 Hydro 子域路径确定；列表只发布账号公开标识、分数与排名。写接口另有 `POST /sms/api/rating/contests` 与 `POST /sms/api/rating/recalculate`，均限定插件管理员并执行同源校验。
+读接口：`GET /sms/api/rating/board?mode=all|recent&page=1&q=&grade=&school=&classId=`、`GET /sms/api/rating/users/<uid>?page=1`。当前域成员范围由 Hydro 子域路径确定；列表只发布账号公开标识、分数与排名。写接口另有 `POST /sms/api/rating/contests` 与 `POST /sms/api/rating/recalculate`，均限定插件管理员并执行同源校验。
+
+排行榜支持按班级筛选：`classId` 使用“班级与子域”的子域 ID。班级选项直接来自共享管理名单，不依赖学生是否建档；只列出当前用户可访问的班级。总榜、进步榜和翻页均保留所选班级，数据概览也按筛选结果统计。
