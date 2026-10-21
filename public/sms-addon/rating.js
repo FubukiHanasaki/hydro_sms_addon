@@ -216,7 +216,7 @@
             link.href = `/user/${u.uid}`;
             account.append(link, el('div', 'sms-secondary', `UID ${u.uid}`));
             const rating = el('td'), tier = el('span', 'sms-rating-tier', u.title);
-            tier.style.color = u.color;
+            tier.style.setProperty('--sms-tier-color', u.color);
             rating.append(el('strong', 'sms-rating-number', number(u.rating)), tier);
             const recent = el('td');
             recent.append(el('span', `sms-rating-delta ${u.recent.delta > 0 ? 'sms-rating-up' : u.recent.delta < 0 ? 'sms-rating-down' : ''}`, signed(u.recent.delta)), el('span', 'sms-secondary', u.recent.text));
