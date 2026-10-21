@@ -1,0 +1,34 @@
+// Narrow compile-time boundary for the Hydro 5.0 plugin API used here.
+// Hydro ships implementation .ts files; importing its complete type graph would
+// type-check the host and every upstream package under this plugin's settings.
+// Runtime compatibility is covered by an isolated Hydro integration run.
+import type { Db } from 'mongodb';
+export interface Context {
+  db: { db: Db };
+  Route(name: string, path: string, handler: typeof Handler): void;
+  injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number): void;
+  i18n: { load(language: string, entries: Record<string, string>): void };
+  on(event: 'handler/after/UserDetail', callback: (handler: Handler) => Promise<void>): void;
+}
+export class Handler {
+  user: { _id: number; hasPriv(privilege: number): boolean };
+  context: {
+    method: string;
+    params: Record<string, string>;
+    query: Record<string, string | string[] | undefined>;
+    request: { body: unknown; protocol: string; host: string };
+    get(name: string): string;
+    is(type: string): string | false | null;
+  };
+  response: {
+    body: any;
+    status: number;
+    type: string;
+    template?: string;
+    addHeader(name: string, value: string): void;
+  };
+  checkPriv(privilege: number): void;
+  url(name: string, args?: Record<string, unknown>): string;
+}
+export const PRIV: { PRIV_USER_PROFILE: number };
+export class ForbiddenError extends Error {}

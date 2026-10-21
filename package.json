@@ -1,0 +1,19 @@
+{
+  "name": "hydro-sms-addon",
+  "version": "0.1.0",
+  "description": "Hydro 原生学生信息管理插件，独立业务授权与隐私控制",
+  "author": "FubukiHanasaki",
+  "license": "AGPL-3.0-or-later",
+  "main": "index.ts",
+  "files": ["index.ts", "src", "templates", "public", "scripts", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "peerDependencies": { "hydrooj": "^5.0.7" },
+  "dependencies": { "mongodb": "^7.0.0" },
+  "devDependencies": { "@types/node": "^22.0.0", "tsx": "^4.20.0", "typescript": "^6.0.0" },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test:local": "TMPDIR=$PWD/.tmp node --import tsx --test .tmp/tests/*.test.ts",
+    "admin": "node scripts/admin.cjs"
+  },
+  "hydro": { "cli": false }
+}

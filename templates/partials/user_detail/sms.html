@@ -1,0 +1,23 @@
+{% if smsStudent %}
+<li class="section__tab-item">
+  <h1 class="section__tab-title">学生资料</h1>
+  <div class="section__tab-main"><div class="section__body typo">
+    <p><strong>{{ smsStudent.basic.name }}</strong> · {{ smsStudent.basic.status }}</p>
+    <table><tbody>
+      <tr><th>学号</th><td>{{ smsStudent.basic.studentNo or '未填写' }}</td><th>年级</th><td>{{ smsStudent.basic.grade or '未填写' }}</td></tr>
+      <tr><th>学校</th><td>{{ smsStudent.basic.school or '未填写' }}</td><th>校区</th><td>{{ smsStudent.basic.campus or '未填写' }}</td></tr>
+      <tr><th>竞赛等级</th><td>{{ smsStudent.basic.competitionLevel or '未填写' }}</td><th>学习阶段</th><td>{{ smsStudent.basic.currentStage or '未填写' }}</td></tr>
+      <tr><th>目标阶段</th><td>{{ smsStudent.basic.targetLevel or '未填写' }}</td><th>入学日期</th><td>{{ smsStudent.basic.enrollmentDate or '未填写' }}</td></tr>
+    </tbody></table>
+    {% if smsStudent.sensitive %}
+    <h3>个人与联系资料</h3><table><tbody>
+      <tr><th>生日</th><td>{{ smsStudent.sensitive.birthday or '未填写' }}</td><th>联系电话</th><td>{{ smsStudent.sensitive.phone or '未填写' }}</td></tr>
+      <tr><th>家长姓名</th><td>{{ smsStudent.sensitive.parentName or '未填写' }}</td><th>家长电话</th><td>{{ smsStudent.sensitive.parentPhone or '未填写' }}</td></tr>
+      <tr><th>微信</th><td>{{ smsStudent.sensitive.wechat or '未填写' }}</td><th>地址</th><td>{{ smsStudent.sensitive.address or '未填写' }}</td></tr>
+    </tbody></table>
+    {% endif %}
+    {% if smsStudent.capabilities.internalNote and smsStudent.internalNote %}<h3>内部备注</h3><p style="white-space:pre-wrap">{{ smsStudent.internalNote }}</p>{% endif %}
+    <p><a href="{{ url('sms_panel') }}">进入学生管理</a></p>
+  </div></div>
+</li>
+{% endif %}

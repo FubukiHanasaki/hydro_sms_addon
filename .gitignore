@@ -1,0 +1,15 @@
+.tmp/
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite*
+*.xlsx
+*.csv
+*.tsbuildinfo
+.DS_Store
