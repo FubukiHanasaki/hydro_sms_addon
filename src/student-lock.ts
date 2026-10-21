@@ -18,5 +18,6 @@ export async function studentLock<T>(db: Db, work: (verify: () => Promise<void>)
   try { await verify(); return await work(verify); } finally { await locks.deleteOne({ _id, token }); }
 }
 export async function requireNoStudentBatch(db: Db) {
+  if (await db.collection('sms_student_imports').findOne({status:'running'})) throw new SmsError(409, '学生导入尚未完成，请先从导入记录继续处理');
   if (await db.collection('sms_bulk_jobs').findOne({ kind: { $in: ['promotion', 'provision'] }, status: { $in: ['running', 'undoing'] } })) throw new SmsError(409, '有未完成的批量操作，请先从批量操作记录继续处理');
 }

@@ -1,13 +1,13 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=bulk-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=student-import-20261021">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
       <div class="section__header">
         <h1 class="section__title">学生档案</h1>
-        <div class="section__tools"><button type="button" class="rounded button sms-bulk-admin" data-bulk="promotion" hidden>批量升年级</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
+        <div class="section__tools"><button type="button" class="rounded button" id="sms-import-students" hidden>批量导入</button><button type="button" class="rounded button sms-bulk-admin" data-bulk="promotion" hidden>批量升年级</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
       </div>
       <div class="section__body">
         <p id="sms-summary" class="help-text">加载中…</p>
@@ -96,7 +96,7 @@
     <form id="sms-account-form"><header class="section__header sms-dialog-header"><h1 id="sms-account-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-account-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-account-error" class="help-text" role="alert"></p><div id="sms-account-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-account-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-account-save">确认保存</button></div></footer></form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?build=bulk-timeline-teachers-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=student-import-20261021" defer></script>
 <script src="/sms-addon/organization.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/accounts.js?build=bulk-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
@@ -106,4 +106,5 @@
 <script src="/sms-addon/teaching.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/teachers.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/bulk.js?build=bulk-20261021" defer></script>
+<script src="/sms-addon/student-import.js?build=student-import-20261021" defer></script>
 {% endblock %}
