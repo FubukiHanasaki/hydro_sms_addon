@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=academic-auth-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=export-layout-20261022">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -43,7 +43,7 @@
       <div class="section__body sms-pagination"><span id="sms-account-page" class="help-text"></span><div><button type="button" id="sms-account-prev" class="rounded button">上一页</button><button type="button" id="sms-account-next" class="rounded button">下一页</button></div></div>
     </section>
     <section id="sms-rating-section" class="section visible" hidden>
-      <div class="section__header"><h1 class="section__title">Rating</h1><span data-sms-export="rating">导出榜单</span><div class="section__tools sms-rating-admin" hidden><button type="button" class="rounded button" id="sms-rating-config">比赛设置</button><button type="button" class="primary rounded button" id="sms-rating-import">导入记录</button></div></div>
+      <div class="section__header"><h1 class="section__title">Rating</h1><div class="section__tools"><span data-sms-export="rating">导出榜单</span><div class="sms-rating-admin" hidden><button type="button" class="rounded button" id="sms-rating-config">比赛设置</button><button type="button" class="primary rounded button" id="sms-rating-import">导入记录</button></div></div></div>
       <div class="section__body"><form id="sms-rating-search" class="sms-rating-toolbar"><input id="sms-rating-query" class="textbox" type="search" placeholder="用户名或 UID" aria-label="搜索 Rating"><select id="sms-rating-mode" class="select" aria-label="榜单"><option value="all">总榜</option><option value="recent">近 30 天进步榜</option></select><select id="sms-rating-class" class="select" aria-label="筛选班级"><option value="">全部班级</option></select><select id="sms-rating-grade" class="select" aria-label="年级"><option value="">全部年级</option></select><select id="sms-rating-school" class="select" aria-label="学校"><option value="">全部学校</option></select><button type="submit" class="rounded button">查询</button></form><div class="sms-rating-summary-row"><p id="sms-rating-summary" class="help-text"></p><button type="button" class="link" id="sms-rating-stats">数据概览</button></div></div>
       <div class="section__body no-padding sms-table-scroll"><table class="sms-ranking-table sms-rating-table"><colgroup><col style="width:7%"><col style="width:20%"><col style="width:25%"><col style="width:17%"><col style="width:14%"><col style="width:17%"></colgroup><thead><tr><th>排名</th><th>用户</th><th>Rating / 称号</th><th>近 30 天</th><th>计分比赛</th><th>操作</th></tr></thead><tbody id="sms-rating-rows"></tbody></table></div>
       <div class="section__body sms-pagination"><span id="sms-rating-page"></span><div><button type="button" class="rounded button" id="sms-rating-prev">上一页</button><button type="button" class="rounded button" id="sms-rating-next">下一页</button></div></div>
@@ -62,7 +62,7 @@
           </form>
         </div>
       </section>
-      <section class="section visible"><div class="section__header"><h2 class="section__title">已有授权</h2><span data-sms-export="permissions">导出授权</span></div><div class="section__body"><p id="sms-admin-list" class="help-text"></p><div id="sms-grant-list"></div></div></section>
+      <section class="section visible"><div class="section__header"><h2 class="section__title">已有授权</h2><div class="section__tools"><span data-sms-export="permissions">导出授权</span></div></div><div class="section__body"><p id="sms-admin-list" class="help-text"></p><div id="sms-grant-list"></div></div></section>
     </div>
     <section id="sms-audit-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">操作记录</h1><div class="section__tools"><span data-sms-export="audit">导出记录</span><button id="sms-refresh-audit" class="rounded button" type="button"><span class="icon icon-refresh"></span> 刷新</button></div></div>
@@ -105,9 +105,9 @@
 <script src="/sms-addon/accounts.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
 <script src="/sms-addon/rating.js?build=academic-auth-20261021" defer></script>
-<link rel="stylesheet" href="/sms-addon/teaching.css?build=timeline-teachers-20261021">
+<link rel="stylesheet" href="/sms-addon/teaching.css?build=export-layout-20261022">
 <script src="/sms-addon/schedule-layout.js?build=timeline-teachers-20261021" defer></script>
-<script src="/sms-addon/teaching.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/teaching.js?build=export-layout-20261022" defer></script>
 <script src="/sms-addon/teachers.js?build=academic-auth-20261021" defer></script>
 <script src="/sms-addon/bulk.js?build=academic-auth-20261021" defer></script>
 <script src="/sms-addon/student-import.js?build=academic-auth-20261021" defer></script>
