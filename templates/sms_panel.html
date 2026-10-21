@@ -1,52 +1,66 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=0.1.0">
-<div id="sms-app" class="sms-shell" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}">
-  <header class="sms-hero">
-    <div><div class="sms-eyebrow">HYDRO · STUDENT MANAGEMENT</div><h1>学生管理</h1><p>连接学生档案与教学成长，让每一位学生的信息清晰有序。</p></div>
-    <div class="sms-identity"><span class="sms-dot"></span><span id="sms-identity">正在确认访问权限…</span></div>
-  </header>
-  <div class="sms-layout">
-    <aside class="sms-sidebar" aria-label="学生管理导航">
-      <div class="sms-sidebar-label">工作空间</div>
-      <button type="button" class="sms-nav active" data-tab="students"><span>▤</span>学生档案</button>
-      <button type="button" class="sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span>◇</span>访问授权</button>
-      <button type="button" class="sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span>◷</span>操作记录</button>
-      <div class="sms-sidebar-note"><strong>使用 Hydro 账号</strong><p>档案访问由插件独立授权，敏感资料仅向本人及获授权人员展示。</p></div>
-      <div class="sms-author">FubukiHanasaki <span>v0.1.0</span></div>
-    </aside>
-    <main class="sms-main">
-      <div id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></div>
-      <section id="sms-students-section">
-        <div class="sms-section-heading"><div><h2>学生档案</h2><p id="sms-summary">正在加载可访问的学生资料</p></div><button type="button" id="sms-create" class="sms-button primary" hidden>＋ 新建学生</button></div>
+<link rel="stylesheet" href="/sms-addon/panel.css?v=0.1.1">
+<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}">
+  <div class="medium-9 columns sms-main">
+    <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
+    <section id="sms-students-section" class="section visible">
+      <div class="section__header">
+        <h1 class="section__title">学生档案</h1>
+        <div class="section__tools"><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
+      </div>
+      <div class="section__body">
+        <p id="sms-summary" class="help-text">正在加载可访问的学生资料</p>
         <form id="sms-search-form" class="sms-toolbar">
-          <label class="sms-search"><span>⌕</span><input id="sms-search" type="search" placeholder="搜索姓名或学号" maxlength="80" aria-label="搜索姓名或学号"></label>
-          <select id="sms-status" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
-          <button class="sms-button" type="submit">查询</button>
+          <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名或学号" maxlength="80" aria-label="搜索姓名或学号">
+          <select id="sms-status" class="select" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
+          <button class="rounded button" type="submit"><span class="icon icon-search"></span> 查询</button>
         </form>
-        <div class="sms-card"><div class="sms-table-scroll"><table class="sms-table"><thead><tr><th>学生</th><th>年级 / 学校</th><th>学习阶段</th><th>状态</th><th>Hydro 账号</th><th><span class="sms-sr-only">操作</span></th></tr></thead><tbody id="sms-student-rows"></tbody></table></div><div id="sms-empty" class="sms-empty" hidden><div>▤</div><h3>暂无可查看的学生档案</h3><p>绑定学生账号或由插件管理员授权后，资料会显示在这里。</p></div><div class="sms-pagination"><span id="sms-page-label"></span><div><button type="button" id="sms-prev" class="sms-button">上一页</button><button type="button" id="sms-next" class="sms-button">下一页</button></div></div></div>
+      </div>
+      <div class="section__body no-padding"><div class="section__table-container sms-table-scroll">
+        <table class="data-table sms-table"><colgroup><col style="width:22%"><col style="width:22%"><col style="width:15%"><col style="width:10%"><col style="width:15%"><col style="width:16%"></colgroup><thead><tr><th>学生</th><th>年级 / 学校</th><th>学习阶段</th><th>状态</th><th>Hydro 账号</th><th>操作</th></tr></thead><tbody id="sms-student-rows"></tbody></table>
+      </div><div id="sms-empty" class="sms-empty" hidden><p>暂无可查看的学生档案</p><p class="help-text">绑定学生账号或由插件管理员授权后，资料会显示在这里。</p></div></div>
+      <div class="section__body sms-pagination"><span id="sms-page-label" class="help-text"></span><div><button type="button" id="sms-prev" class="rounded button">上一页</button><button type="button" id="sms-next" class="rounded button">下一页</button></div></div>
+    </section>
+    <div id="sms-permissions-section" hidden>
+      <section class="section visible">
+        <div class="section__header"><h1 class="section__title">访问授权</h1></div>
+        <div class="section__body">
+          <p class="help-text">查看、敏感信息、编辑和账号绑定分别授权。</p>
+          <form id="sms-grant-form">
+            <div class="sms-form-grid"><label>Hydro UID<input class="textbox" type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>授权失效时间（北京时间）<input class="textbox" type="datetime-local" id="sms-grant-expires"><span class="help-text">留空表示长期有效</span></label></div>
+            <fieldset class="sms-checks"><legend>允许的操作</legend><label class="checkbox"><input class="checkbox__input" type="checkbox" checked disabled> 查看基本资料</label><label class="checkbox"><input class="checkbox__input" type="checkbox" value="students.sensitive" name="sms-permission"> 查看敏感资料与内部备注</label><label class="checkbox"><input class="checkbox__input" type="checkbox" value="students.write" name="sms-permission"> 编辑资料</label><label class="checkbox"><input class="checkbox__input" type="checkbox" value="students.bind" name="sms-permission"> 绑定 / 解绑 Hydro 账号</label></fieldset>
+            <label class="sms-field">学生范围<select class="select" id="sms-grant-scope"><option value="all">全部学生</option><option value="selected">指定学生</option></select></label>
+            <div id="sms-grant-students" hidden><label class="sms-field">查找学生<input class="textbox" id="sms-scope-search" type="search" placeholder="输入姓名或学号"></label><div id="sms-selected-students" class="sms-chips"></div><div id="sms-scope-options" class="sms-scope-options"></div></div>
+            <p class="help-text">敏感资料编辑需同时具备编辑与敏感资料权限。授权立即生效，撤销后下次请求立即失效。</p>
+            <button class="primary rounded button" type="submit">保存授权</button>
+          </form>
+        </div>
       </section>
-      <section id="sms-permissions-section" hidden>
-        <div class="sms-section-heading"><div><h2>访问授权</h2><p>查看、敏感信息、编辑和账号绑定分别授权。</p></div></div>
-        <div class="sms-card sms-card-body"><h3>为 Hydro 用户授权</h3><form id="sms-grant-form">
-          <div class="sms-form-grid"><label>Hydro UID<input type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>授权失效时间（北京时间）<input type="datetime-local" id="sms-grant-expires"><small>留空表示长期有效</small></label></div>
-          <fieldset class="sms-checks"><legend>允许的操作</legend><label><input type="checkbox" checked disabled>查看基本资料</label><label><input type="checkbox" value="students.sensitive" name="sms-permission">查看敏感资料与内部备注</label><label><input type="checkbox" value="students.write" name="sms-permission">编辑资料</label><label><input type="checkbox" value="students.bind" name="sms-permission">绑定 / 解绑 Hydro 账号</label></fieldset>
-          <label class="sms-field">学生范围<select id="sms-grant-scope"><option value="all">全部学生</option><option value="selected">指定学生</option></select></label>
-          <div id="sms-grant-students" hidden><label class="sms-field">查找学生<input id="sms-scope-search" type="search" placeholder="输入姓名或学号"></label><div id="sms-selected-students" class="sms-chips"></div><div id="sms-scope-options" class="sms-scope-options"></div></div>
-          <p class="sms-muted">敏感资料编辑需同时具备编辑与敏感资料权限。授权立即生效，撤销后下次请求立即失效。</p>
-          <button class="sms-button primary" type="submit">保存授权</button>
-        </form></div>
-        <div class="sms-card sms-card-body"><h3>已有授权</h3><p id="sms-admin-list" class="sms-muted"></p><div id="sms-grant-list"></div></div>
-      </section>
-      <section id="sms-audit-section" hidden><div class="sms-section-heading"><div><h2>操作记录</h2><p>最近 100 条记录。仅记录操作者、操作和字段名称，不保存敏感字段内容。</p></div><button id="sms-refresh-audit" class="sms-button" type="button">刷新</button></div><div class="sms-card sms-table-scroll"><table class="sms-table"><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody id="sms-audit-rows"></tbody></table></div></section>
-    </main>
+      <section class="section visible"><div class="section__header"><h2 class="section__title">已有授权</h2></div><div class="section__body"><p id="sms-admin-list" class="help-text"></p><div id="sms-grant-list"></div></div></section>
+    </div>
+    <section id="sms-audit-section" class="section visible" hidden>
+      <div class="section__header"><h1 class="section__title">操作记录</h1><div class="section__tools"><button id="sms-refresh-audit" class="rounded button" type="button"><span class="icon icon-refresh"></span> 刷新</button></div></div>
+      <div class="section__body"><p class="help-text">最近 100 条记录。仅记录操作者、操作和字段名称，不保存敏感字段内容。</p></div>
+      <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table sms-audit-table"><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody id="sms-audit-rows"></tbody></table></div></div>
+    </section>
   </div>
-  <dialog id="sms-student-dialog" class="sms-dialog" aria-labelledby="sms-dialog-title">
-    <form id="sms-student-form"><header class="sms-dialog-header"><div><div class="sms-eyebrow">STUDENT PROFILE</div><h2 id="sms-dialog-title">学生资料</h2></div><button type="button" class="sms-close" id="sms-close-dialog" aria-label="关闭">×</button></header>
-      <div class="sms-dialog-body"><div id="sms-dialog-error" class="sms-notice error" role="alert" hidden></div><div id="sms-student-fields"></div></div>
-      <footer class="sms-dialog-footer"><a id="sms-hydro-profile" class="sms-profile-link" hidden>查看 Hydro 资料页 ↗</a><div><button type="button" class="sms-button" id="sms-cancel-dialog">关闭</button><button type="submit" class="sms-button primary" id="sms-save-student">保存资料</button></div></footer>
+  <aside class="medium-3 columns sms-sidebar" aria-label="学生管理导航">
+    <section class="section side visible"><div class="section__header"><h1 class="section__title">学生管理</h1></div><ol class="menu">
+      <li class="menu__item"><button type="button" class="menu__link sms-nav active" data-tab="students"><span class="icon icon-user"></span> 学生档案</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
+    </ol></section>
+    <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">正在确认访问权限…</p><p class="help-text">学生本人可查看自己的资料。其他访问由插件管理员单独授权。</p></div></section>
+    <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.1.1</p></div></div>
+  </aside>
+  <dialog id="sms-student-dialog" class="section visible sms-dialog" aria-labelledby="sms-dialog-title">
+    <form id="sms-student-form">
+      <header class="section__header sms-dialog-header"><h1 class="section__title" id="sms-dialog-title">学生资料</h1><button type="button" class="link sms-close" id="sms-close-dialog" aria-label="关闭"><span class="icon icon-close"></span></button></header>
+      <div class="section__body sms-dialog-body"><div class="typo"><blockquote id="sms-dialog-error" class="warn sms-notice" role="alert" hidden></blockquote></div><div id="sms-student-fields"></div></div>
+      <footer class="section__footer sms-dialog-footer"><a id="sms-hydro-profile" hidden>查看 Hydro 资料页</a><div><button type="button" class="rounded button" id="sms-cancel-dialog">关闭</button><button type="submit" class="primary rounded button" id="sms-save-student">保存资料</button></div></footer>
     </form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?v=0.1.0" defer></script>
+<script src="/sms-addon/panel.js?v=0.1.1" defer></script>
 {% endblock %}

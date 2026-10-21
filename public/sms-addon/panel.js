@@ -26,7 +26,7 @@
   }
   function notice(message, error = false) {
     $('sms-notice').hidden = !message;
-    $('sms-notice').className = `sms-notice${error ? ' error' : ''}`;
+    $('sms-notice').className = `sms-notice${error ? ' warn' : ''}`;
     $('sms-notice').textContent = message;
   }
   async function api(url, body) {
@@ -67,18 +67,17 @@
     const rows = $('sms-student-rows'); rows.replaceChildren();
     for (const student of state.students) {
       const row = element('tr'); const nameCell = element('td');
-      const person = element('div', 'sms-student-cell');
-      person.append(element('span', 'sms-avatar', student.name.slice(0, 1)));
+      const person = element('div');
       const identity = element('div'); identity.append(element('div', 'sms-student-name', student.name), element('div', 'sms-secondary', student.studentNo || '未填写学号'));
       person.append(identity); nameCell.append(person); row.append(nameCell);
       const school = element('td'); school.append(element('div', '', student.grade || '未填写年级'), element('div', 'sms-secondary', student.school || '未填写学校')); row.append(school);
       row.append(element('td', '', student.currentStage || '—'));
-      const status = element('td'); status.append(element('span', `sms-tag${student.status === '休学' ? ' pause' : student.status === '离校' ? ' left' : ''}`, student.status)); row.append(status);
+      const status = element('td'); status.append(element('span', student.status === '休学' ? 'text-orange' : student.status === '离校' ? 'text-gray' : 'text-green', student.status)); row.append(status);
       const account = element('td');
-      if (student.hydroUid) { const link = element('a', 'sms-link', `UID ${student.hydroUid}`); link.href = `/user/${student.hydroUid}`; account.append(link); }
+      if (student.hydroUid) { const link = element('a', 'link sms-link', `UID ${student.hydroUid}`); link.href = `/user/${student.hydroUid}`; account.append(link); }
       else account.append(element('span', 'sms-secondary', '未绑定'));
       row.append(account);
-      const actions = element('td'); const view = element('button', 'sms-link', '查看资料 →'); view.type = 'button'; view.addEventListener('click', () => openStudent(student.id)); actions.append(view); row.append(actions); rows.append(row);
+      const actions = element('td'); const view = element('button', 'link sms-link', '查看资料 →'); view.type = 'button'; view.addEventListener('click', () => openStudent(student.id)); actions.append(view); row.append(actions); rows.append(row);
     }
     $('sms-empty').hidden = state.students.length !== 0;
     $('sms-summary').textContent = `共 ${state.total} 名可访问学生 · 资料按最近更新时间排列`;
@@ -87,16 +86,16 @@
     $('sms-next').disabled = state.page * 20 >= state.total;
   }
   function fieldGroup(title, fields, values, editable, prefix) {
-    const fragment = document.createDocumentFragment(); fragment.append(element('h3', '', title));
+    const fragment = document.createDocumentFragment(); fragment.append(element('h2', 'section__title', title));
     const grid = element('div', 'sms-form-grid');
     for (const [key, label, type = 'text', required = false] of fields) {
       const wrapper = element('label', '', label + (required && editable ? ' *' : ''));
       if (editable) {
         let input;
         if (Array.isArray(type)) {
-          input = element('select');
+          input = element('select', 'select');
           for (const option of type) { const node = element('option', '', option); node.value = option; input.append(node); }
-        } else { input = element('input'); input.type = type; input.maxLength = key === 'name' ? 80 : key === 'address' ? 500 : 160; }
+        } else { input = element('input', 'textbox'); input.type = type; input.maxLength = key === 'name' ? 80 : key === 'address' ? 500 : 160; }
         input.name = `${prefix}.${key}`; input.value = values[key] || (key === 'status' ? '在校' : key === 'gender' ? '未填写' : ''); input.required = !!required; wrapper.append(input);
       } else wrapper.append(element('div', 'sms-read-value', values[key] || '未填写'));
       grid.append(wrapper);
@@ -111,22 +110,22 @@
       const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
       $('sms-dialog-title').textContent = student ? student.basic.name : '新建学生';
       const fields = $('sms-student-fields'); fields.replaceChildren();
-      if (!caps.edit && !caps.bind) fields.append(element('p', 'sms-read-only', '当前以只读方式查看。资料修改请联系获授权的管理人员。'));
+      if (!caps.edit && !caps.bind) fields.append(element('blockquote', 'sms-read-only', '当前以只读方式查看。资料修改请联系获授权的管理人员。'));
       fields.append(fieldGroup('基本资料', basicFields, student?.basic || {}, caps.edit, 'basic'));
       if (caps.sensitive) fields.append(fieldGroup('个人与联系资料', sensitiveFields, student?.sensitive || {}, caps.editSensitive, 'sensitive'));
       if (caps.internalNote) {
-        fields.append(element('h3', '', '内部备注'));
-        if (caps.edit) { const note = element('textarea'); note.name = 'internalNote'; note.rows = 3; note.maxLength = 3000; note.value = student?.internalNote || ''; note.setAttribute('aria-label', '内部备注'); fields.append(note); }
+        fields.append(element('h2', 'section__title', '内部备注'));
+        if (caps.edit) { const note = element('textarea', 'textbox'); note.name = 'internalNote'; note.rows = 3; note.maxLength = 3000; note.value = student?.internalNote || ''; note.setAttribute('aria-label', '内部备注'); fields.append(note); }
         else fields.append(element('p', 'sms-read-value', student?.internalNote || '未填写'));
-        fields.append(element('p', 'sms-muted', '内部备注不会向学生本人展示。'));
+        fields.append(element('p', 'help-text', '内部备注不会向学生本人展示。'));
       }
-      fields.append(element('h3', '', 'Hydro 账号关联'));
+      fields.append(element('h2', 'section__title', 'Hydro 账号关联'));
       if (caps.bind) {
-        const label = element('label', 'sms-field', 'Hydro UID'); const input = element('input'); input.type = 'number'; input.min = '1'; input.step = '1'; input.name = 'hydroUid'; input.placeholder = '留空表示不绑定账号'; input.value = student?.hydroUid || ''; label.append(input); fields.append(label);
-        fields.append(element('p', 'sms-muted', '绑定后，该 Hydro 用户可查看自己的基本与联系资料。请核实 UID 后再保存。'));
+        const label = element('label', 'sms-field', 'Hydro UID'); const input = element('input', 'textbox'); input.type = 'number'; input.min = '1'; input.step = '1'; input.name = 'hydroUid'; input.placeholder = '留空表示不绑定账号'; input.value = student?.hydroUid || ''; label.append(input); fields.append(label);
+        fields.append(element('p', 'help-text', '绑定后，该 Hydro 用户可查看自己的基本与联系资料。请核实 UID 后再保存。'));
       } else fields.append(element('p', 'sms-read-value', student?.hydroUid ? `UID ${student.hydroUid}` : '未绑定'));
       if (student) {
-        const footnote = element('p', 'sms-muted', `最近更新：${dateTime(student.updatedAt)} · 档案编号 ${student.id}`); fields.append(footnote);
+        const footnote = element('p', 'help-text', `最近更新：${dateTime(student.updatedAt)} · 档案编号 ${student.id}`); fields.append(footnote);
       }
       $('sms-hydro-profile').hidden = !student?.hydroUid;
       if (student?.hydroUid) $('sms-hydro-profile').href = `/user/${student.hydroUid}`;
@@ -159,13 +158,13 @@
     state.policy = await api(app.dataset.permissions);
     $('sms-admin-list').textContent = `插件管理员：${state.policy.admins.map((uid) => `UID ${uid}`).join('、')}。管理员身份由服务器命令管理。`;
     const list = $('sms-grant-list'); list.replaceChildren();
-    if (!state.policy.grants.length) list.append(element('p', 'sms-muted', '暂无追加授权。绑定学生仍可查看本人资料。'));
+    if (!state.policy.grants.length) list.append(element('p', 'help-text', '暂无追加授权。绑定学生仍可查看本人资料。'));
     for (const grant of state.policy.grants) {
       const row = element('div', 'sms-grant-item'); const info = element('div'); const expired = grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now();
       info.append(element('strong', '', `UID ${grant.uid}${expired ? ' · 已失效' : ''}`));
       info.append(element('p', '', grant.permissions.map((p) => permissionLabels[p]).join(' · ')));
       info.append(element('p', '', `${grant.studentIds === 'all' ? '全部学生' : `指定 ${grant.studentIds.length} 名学生`} · ${grant.expiresAt ? `${dateTime(grant.expiresAt)} 到期` : '长期有效'}`));
-      const controls = element('div'); const edit = element('button', 'sms-link', '编辑'); edit.type = 'button';
+      const controls = element('div'); const edit = element('button', 'link sms-link', '编辑'); edit.type = 'button';
       edit.addEventListener('click', async () => {
         $('sms-grant-uid').value = grant.uid;
         $('sms-grant-expires').value = grant.expiresAt ? new Date(Date.parse(grant.expiresAt) + 8 * 3600000).toISOString().slice(0, 16) : '';
@@ -176,7 +175,7 @@
         try { await loadScope(); } catch (error) { notice(error.message, true); }
         $('sms-grant-uid').focus();
       });
-      const revoke = element('button', 'sms-link', '撤销'); revoke.type = 'button'; revoke.addEventListener('click', async () => {
+      const revoke = element('button', 'link sms-link', '撤销'); revoke.type = 'button'; revoke.addEventListener('click', async () => {
         if (!confirm(`撤销 UID ${grant.uid} 的全部追加授权？`)) return;
         revoke.disabled = true;
         try { await api(app.dataset.permissions, { action: 'revoke', uid: grant.uid, revision: state.policy.revision }); await loadPolicy(); notice('授权已撤销。'); }
@@ -188,7 +187,7 @@
   function renderChips() {
     const chips = $('sms-selected-students'); chips.replaceChildren();
     for (const [id, label] of state.selected) {
-      const chip = element('button', '', `${label} ×`); chip.type = 'button'; chip.addEventListener('click', () => { state.selected.delete(id); renderChips(); document.querySelectorAll('[data-student-id]').forEach((c) => { if (c.dataset.studentId === id) c.checked = false; }); }); chips.append(chip);
+      const chip = element('button', 'small rounded button', `${label} ×`); chip.type = 'button'; chip.addEventListener('click', () => { state.selected.delete(id); renderChips(); document.querySelectorAll('[data-student-id]').forEach((c) => { if (c.dataset.studentId === id) c.checked = false; }); }); chips.append(chip);
     }
   }
   let scopeRequest = 0;
@@ -202,12 +201,12 @@
     const options = $('sms-scope-options'); options.replaceChildren();
     for (const student of result.students) {
       if (state.selected.has(student.id)) state.selected.set(student.id, student.name);
-      const label = element('label'); const checkbox = element('input'); checkbox.type = 'checkbox'; checkbox.dataset.studentId = student.id; checkbox.checked = state.selected.has(student.id);
+      const label = element('label', 'checkbox'); const checkbox = element('input', 'checkbox__input'); checkbox.type = 'checkbox'; checkbox.dataset.studentId = student.id; checkbox.checked = state.selected.has(student.id);
       checkbox.addEventListener('change', () => { if (checkbox.checked) state.selected.set(student.id, student.name); else state.selected.delete(student.id); renderChips(); });
       label.append(checkbox, document.createTextNode(`${student.name} · ${student.studentNo || '未填写学号'}`)); options.append(label);
     }
-    if (result.total > 20) options.append(element('p', 'sms-muted', '显示前 20 条，请输入姓名或学号缩小范围。'));
-    if (!result.total) options.append(element('p', 'sms-muted', '没有匹配的学生。'));
+    if (result.total > 20) options.append(element('p', 'help-text', '显示前 20 条，请输入姓名或学号缩小范围。'));
+    if (!result.total) options.append(element('p', 'help-text', '没有匹配的学生。'));
     renderChips();
   }
   async function saveGrant(event) {
