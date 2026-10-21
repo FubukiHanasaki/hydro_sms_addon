@@ -18,3 +18,29 @@ outputs/
 # Local agent instructions
 AGENTS.md
 agents.md
+
+# Local environments, credentials and deployment data
+.agents/
+.codex/
+.idea/
+.vscode/
+.hydro-runtime/
+cloud_clones/
+local-access.json
+config.local.*
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.bson
+*.dump
+*.archive
+*.bak
+backups/
+
+# Tests and local verification artifacts
+test/
+tests/
+*.test.*
+*.spec.*
