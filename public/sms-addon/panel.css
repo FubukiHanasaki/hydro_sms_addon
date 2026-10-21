@@ -291,3 +291,17 @@
 .sms-shell #sms-org-fields .sms-field > textarea.textbox { height: 110px; }
 .sms-member-person .sms-student-name { line-height: 1.5; }
 .sms-member-person .sms-secondary { line-height: 1.4; margin-top: 2px; }
+.sms-member-add-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.sms-member-add-actions .button, .sms-member-add-actions .help-text { margin: 0; }
+.sms-main-member-hint { grid-column: 1 / -1; }
+.sms-member-editable { grid-template-columns: minmax(0, 1fr) 130px 190px; }
+.sms-member-editable .sms-member-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sms-shell .sms-member-role-select { width: 100%; margin: 0; box-sizing: border-box; height: 36px; }
+.sms-shell #sms-account-fields .sms-field { max-width: none; min-width: 0; }
+.sms-shell #sms-account-fields .textbox { width: 100%; box-sizing: border-box; height: 36px; }
+@media (max-width: 767px) {
+  .sms-member-editable { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sms-member-editable .sms-member-person { grid-column: 1 / -1; }
+  .sms-member-editable .sms-member-actions .button { padding-left: 10px; padding-right: 10px; }
+  .sms-member-add-actions { align-items: flex-start; flex-wrap: wrap; }
+}

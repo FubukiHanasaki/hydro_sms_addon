@@ -6,7 +6,7 @@
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = String(text); return node; };
   const button = (label, work, cls = 'rounded button') => {
     const node = el('button', cls, label); node.type = 'button';
-    node.addEventListener('click', async () => { if (node.disabled) return; node.disabled = true; try { await work(); } catch (e) { error(e); } finally { node.disabled = false; } }); return node;
+    node.addEventListener('click', async () => { if (node.disabled) return; node.disabled = true; try { await work(); } catch (e) { error(e); } finally { node.disabled = node.hasAttribute('data-disabled'); } }); return node;
   };
   function error(e) { const node = $('sms-org-dialog').open ? $('sms-org-error') : $('sms-notice'); node.textContent = e.message; node.hidden = false; }
   async function api(url, body) {
@@ -69,13 +69,21 @@
     const pager = $('sms-org-pagination'); pager.hidden = false;
     if (me.admin) {
       const add = el('div', 'sms-member-add'); const addQuery = field(add, 'account-query', '添加已有 Hydro 账号'); addQuery.placeholder = '输入用户名或 UID'; addQuery.type = 'search';
-      const kind = field(add, 'member-kind', '身份', 'member', [['member', '普通成员'], ['teacher', '任课教师'], ['student', '学生（需绑定档案）']]);
-      const results = el('div', 'sms-account-results'); results.id = 'sms-member-account-results'; add.append(results); root.prepend(add);
+      const kind = field(add, 'member-kind', '身份', 'member', [['member', '普通成员'], ['teacher', '任课教师'], ['student', id === 'system' ? '学生' : '学生（需档案）']]);
+      const results = el('div', 'sms-account-results'); results.id = 'sms-member-account-results';
+      const selected = el('p', 'help-text'); selected.id = 'sms-member-selected'; let selectedUser = null;
+      const confirm = button('确认添加', async () => {
+        if (busy || !selectedUser) return; busy = true;
+        try { await api(`${app.dataset.domains}/${encodeURIComponent(id)}/members`, { uid: selectedUser.uid, joined: true, kind: kind.value, version }); addQuery.value = ''; selectedUser = null; selected.textContent = ''; results.replaceChildren(); await loadClasses(); await load(); }
+        catch (e) { await load(); throw e; } finally { busy = false; confirm.toggleAttribute('data-disabled', !selectedUser); confirm.disabled = !selectedUser; }
+      }, 'primary rounded button'); confirm.id = 'sms-member-confirm-add'; confirm.disabled = true; confirm.setAttribute('data-disabled', '');
+      const controls = el('div', 'sms-member-add-actions'); controls.append(selected, confirm); add.append(results, controls); root.prepend(add);
+      if (id === 'system') add.append(el('p', 'help-text sms-main-member-hint', '主域所有账号默认加入，无需学生档案。选择账号和身份后点击确认添加，可更新其成员身份。'));
       let timer; let accountRequest = 0;
       const search = async () => { const current = ++accountRequest; if (!addQuery.value.trim()) { results.replaceChildren(); return; } const url = new URL(app.dataset.users, location.origin); url.search = new URLSearchParams({ q: addQuery.value.trim() }); const users = await api(url); if (current !== accountRequest || activeDialog !== dialogSerial) return;
-        results.replaceChildren(); for (const user of users) results.append(button(`${user.username} · UID ${user.uid}`, async () => { if (busy) return; busy = true; try { await api(`${app.dataset.domains}/${encodeURIComponent(id)}/members`, { uid: user.uid, joined: true, kind: kind.value, version }); addQuery.value = ''; results.replaceChildren(); await load(); await loadClasses(); } catch (e) { await load(); throw e; } finally { busy = false; } })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));
+        results.replaceChildren(); for (const user of users) results.append(button(`${user.username} · UID ${user.uid}`, () => { selectedUser = user; selected.textContent = `已选择 ${user.username}（UID ${user.uid}）`; confirm.disabled = false; confirm.removeAttribute('data-disabled'); results.replaceChildren(); })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));
       };
-      addQuery.addEventListener('input', () => { clearTimeout(timer); accountRequest++; timer = setTimeout(() => search().catch(error), 250); }); addQuery.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); search().catch(error); } });
+      addQuery.addEventListener('input', () => { clearTimeout(timer); accountRequest++; selectedUser = null; selected.textContent = ''; confirm.disabled = true; confirm.setAttribute('data-disabled', ''); timer = setTimeout(() => search().catch(error), 250); }); addQuery.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); search().catch(error); } });
     }
     async function load() {
       const current = ++serial; refresh.disabled = true;
@@ -86,10 +94,15 @@
         version = data.version; summary.textContent = `共 ${data.total} 名成员${me.admin ? ' · 班级与子域共用此名册' : ''}`; list.replaceChildren();
         for (const m of data.members) {
           const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.studentName || m.username), el('div', 'sms-secondary', `${m.studentName ? `${m.username} · ` : ''}UID ${m.uid}`));
-          row.append(person, el('span', 'sms-member-kind', ({ teacher: '任课教师', student: '学生', member: '普通成员' })[m.kind]));
-          const actions = el('div', 'sms-member-actions');
-          if (m.canRemove) actions.append(button('移除', async () => { if (busy) return; busy = true; try { await api(url.pathname, { uid: m.uid, joined: false, version }); await load(); await loadClasses(); } catch (e) { await load(); throw e; } finally { busy = false; } }));
-          else if (m.uid === c.owner) actions.append(el('span', 'help-text', '所有者'));
+          row.append(person); const actions = el('div', 'sms-member-actions');
+          if (data.canManage) {
+            row.classList.add('sms-member-editable'); const identity = el('select', 'select sms-member-role-select'); identity.setAttribute('aria-label', `修改 ${m.username} 的身份`);
+            options(identity, [['member', '普通成员'], ['teacher', '任课教师'], ['student', id === 'system' ? '学生' : '学生（需档案）']], m.kind); row.append(identity);
+            const apply = button('保存身份', async () => { if (busy) return; busy = true; identity.disabled = true; try { await api(url.pathname, { uid: m.uid, joined: true, roleOnly: true, kind: identity.value, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } });
+            apply.disabled = true; apply.setAttribute('aria-label', `保存 ${m.username} 的身份`); identity.addEventListener('change', () => { apply.disabled = identity.value === m.kind; }); actions.append(apply);
+          } else row.append(el('span', 'sms-member-kind', ({ teacher: '任课教师', student: '学生', member: '普通成员' })[m.kind]));
+          if (m.canRemove) actions.append(button('移除', async () => { if (busy) return; busy = true; try { await api(url.pathname, { uid: m.uid, joined: false, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } }));
+          else actions.append(el('span', 'help-text', m.uid === c.owner ? '所有者' : id === 'system' ? '默认加入' : ''));
           row.append(actions); list.append(row);
         }
         if (!data.members.length) list.append(el('p', 'sms-empty', '没有符合条件的成员'));

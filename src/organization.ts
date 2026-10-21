@@ -11,7 +11,7 @@ export interface DomainGateway {
 }
 interface ClassDoc {
   _id: string; domainId: string; type: string; academicYear: string; schedule: string;
-  location: string; status: 'active' | 'archived'; teacherUids: number[]; version: number;
+  location: string; status: 'active' | 'archived'; teacherUids: number[]; memberKinds?: Record<string, 'member' | 'teacher' | 'student'>; version: number;
   updatedAt: Date; updatedBy: number; syncState?: 'pending' | 'failed' | 'ready';
 }
 interface DomainDoc { _id: string; name?: string; bulletin?: string; owner: number }
@@ -25,6 +25,17 @@ export class OrganizationService {
     if (duplicate) throw new Error(`班级与子域需要一对一关联，请先核对重复子域：${duplicate._id}`);
     await this.classes.createIndex({ domainId: 1 }, { unique: true });
     await this.classes.createIndex({ teacherUids: 1 });
+    await this.ensureMainMembers();
+  }
+  async ensureMainMembers(uid?: number) {
+    if (uid !== undefined && (!Number.isSafeInteger(uid) || uid <= 0)) return;
+    if (!await this.domains.findOne({ _id: 'system' }, { projection: { _id: 1 } })) return;
+    const missing = this.db.collection('user').aggregate<{ _id: number }>([
+      { $match: { _id: uid ?? { $gt: 0 } } },
+      { $lookup: { from: 'domain.user', localField: '_id', foreignField: 'uid', pipeline: [{ $match: { domainId: 'system', join: true } }, { $limit: 1 }], as: 'membership' } },
+      { $match: { 'membership.0': { $exists: false } } }, { $project: { _id: 1 } },
+    ]);
+    for await (const user of missing) await this.host.join('system', user._id, true);
   }
   async metadata(id: string) { return this.classes.findOne({ $or: [{ _id: id }, { domainId: id }] }); }
   async domain(id: string) { const row = await this.domains.findOne({ _id: id }); if (!row) throw new SmsError(404, '班级与子域不存在'); return row; }
@@ -33,7 +44,7 @@ export class OrganizationService {
     const me = await this.students.me(uid);
     const joined = uid > 0 && await this.joined(domain._id, uid);
     const teacher = joined && !!metadata?.teacherUids.includes(uid);
-    if (!me.admin && !teacher && !(joined && me.boundStudentId)) throw new SmsError(404, '班级与子域不存在或无权查看');
+    if (!me.admin && !teacher && !(joined && (me.boundStudentId || domain._id === 'system'))) throw new SmsError(404, '班级与子域不存在或无权查看');
     return { me, staff: me.admin || teacher };
   }
   async allowedDomains(uid: number) {
@@ -41,7 +52,7 @@ export class OrganizationService {
     const joined: string[] = await this.db.collection('domain.user').distinct('domainId', { uid, join: true });
     if (me.boundStudentId) return joined;
     const taught = await this.classes.distinct('domainId', { teacherUids: uid });
-    return joined.filter(id => taught.includes(id));
+    return joined.filter(id => id === 'system' || taught.includes(id));
   }
   async domainList(uid: number) {
     const ids = await this.allowedDomains(uid);
@@ -138,6 +149,7 @@ export class OrganizationService {
   }
   async domainMembers(uid: number, id: string, query: unknown, pageValue: unknown) {
     const meta = await this.metadata(id); const domain = await this.domain(meta?.domainId || id); const { me, staff } = await this.access(uid, domain, meta);
+    if (domain._id === 'system') await this.ensureMainMembers();
     const q = text(query ?? '', 80, '搜索词'); const page = this.page(pageValue);
     const teachers = meta?.teacherUids ?? [];
     const [result] = await this.db.collection('domain.user').aggregate([
@@ -145,28 +157,33 @@ export class OrganizationService {
       { $lookup: { from: 'user', localField: 'uid', foreignField: '_id', as: 'user' } }, { $unwind: '$user' },
       { $lookup: { from: 'sms_students', localField: 'uid', foreignField: 'hydroUid', pipeline: [{ $project: { 'basic.name': 1 } }], as: 'student' } },
       ...q ? [{ $match: { $or: [{ 'user.uname': { $regex: this.pattern(q), $options: 'i' } }, { 'student.basic.name': { $regex: this.pattern(q), $options: 'i' } }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } }] : [],
-      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [me.admin, { $ne: ['$uid', domain.owner] }] } } }] } },
+      { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [me.admin, { $ne: ['$uid', domain.owner] }, domain._id !== 'system'] } } }] } },
     ]).toArray();
-    return { total: result?.count[0]?.total ?? 0, members: result?.members ?? [], page, pageSize: 20, version: meta?.version ?? 0, canManage: me.admin };
+    return { total: result?.count[0]?.total ?? 0, members: (result?.members ?? []).map((member: Document) => ({ ...member, kind: meta?.memberKinds?.[String(member.uid)] ?? member.kind })), page, pageSize: 20, version: meta?.version ?? 0, canManage: me.admin };
   }
   async domainMembership(uid: number, id: string, value: unknown) {
-    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['uid', 'joined', 'kind', 'version']);
+    await this.students.requireAdmin(uid); const input = object(value); this.fields(input, ['uid', 'joined', 'kind', 'version', 'roleOnly']);
     const target = await this.students.assertUser(input.uid); if (!target || typeof input.joined !== 'boolean') throw new SmsError(400, '请指定有效账号与加入状态');
     const kind = input.kind ?? 'member'; if (!['member', 'teacher', 'student'].includes(String(kind))) throw new SmsError(400, '成员身份无效');
-    if (kind === 'student' && !await this.students.students.findOne({ hydroUid: target })) throw new SmsError(400, '该账号尚未绑定学生档案，请先创建或绑定学生');
+    if (input.roleOnly !== undefined && typeof input.roleOnly !== 'boolean') throw new SmsError(400, '身份修改标识无效');
     if (!Number.isSafeInteger(input.version) || (input.version as number) < 0) throw new SmsError(400, '成员修改需要有效版本号');
+    if (input.roleOnly && input.kind === undefined) throw new SmsError(400, '请选择要修改的成员身份');
     const initial = await this.metadata(id); const domainId = initial?.domainId || id;
+    if (domainId !== 'system' && kind === 'student' && !await this.students.students.findOne({ hydroUid: target })) throw new SmsError(400, '该账号尚未绑定学生档案，请先创建或绑定学生');
     return this.locked(domainId, async verify => {
       const domain = await this.domain(domainId); const meta = await this.metadata(domainId);
       if ((meta?.version ?? 0) !== input.version) throw new SmsError(409, '成员或资料已更新，请刷新名册后重试');
+      if (domainId === 'system' && !input.joined) throw new SmsError(400, '主域所有账号默认加入，不能移除成员');
+      if (input.roleOnly && (!input.joined || !await this.joined(domainId, target))) throw new SmsError(400, '只能修改已有成员的身份');
       if (!input.joined && target === domain.owner) throw new SmsError(400, '不能移除班级与子域的所有者');
-      return this.students.mutation(uid, input.joined ? 'domains.join' : 'domains.leave', `${domainId}/${target}`, ['uid', 'joined', 'kind'], async () => {
+      return this.students.mutation(uid, input.roleOnly ? 'domains.role' : input.joined ? 'domains.join' : 'domains.leave', `${domainId}/${target}`, ['uid', 'joined', 'kind'], async () => {
         const key = meta?._id || domainId;
         await this.classes.updateOne({ _id: key }, { $set: { domainId, updatedAt: new Date(), updatedBy: uid, syncState: 'pending' }, $setOnInsert: { type: '', academicYear: '', schedule: '', location: '', status: 'active', teacherUids: [] }, $inc: { version: 1 } }, { upsert: true });
         try {
-          await verify(); await this.host.join(domainId, target, input.joined as boolean);
+          await verify(); if (!input.roleOnly) await this.host.join(domainId, target, input.joined as boolean);
           const teacherUids = new Set(meta?.teacherUids ?? []); if (input.joined && kind === 'teacher') teacherUids.add(target); else teacherUids.delete(target);
-          await this.classes.updateOne({ _id: key }, { $set: { teacherUids: [...teacherUids], syncState: 'ready' } });
+          const memberKinds = { ...meta?.memberKinds }; if (input.joined) memberKinds[String(target)] = kind as 'member' | 'teacher' | 'student'; else delete memberKinds[String(target)];
+          await this.classes.updateOne({ _id: key }, { $set: { teacherUids: [...teacherUids], memberKinds, syncState: 'ready' } });
         } catch (e) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw e; }
         return { uid: target, joined: input.joined, version: (meta?.version ?? 0) + 1 };
       });

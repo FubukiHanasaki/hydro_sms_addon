@@ -33,7 +33,14 @@ export class Handler {
   url(name: string, args?: Record<string, unknown>): string;
 }
 export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number };
-export const UserModel: { create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number> };
+export const UserModel: {
+  create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number>;
+  setUname(uid: number, username: string): Promise<unknown>;
+  setPassword(uid: number, password: string): Promise<unknown>;
+  setPriv(uid: number, priv: number): Promise<unknown>;
+};
+export const TokenModel: { delByUid(uid: number): Promise<unknown> };
+export const Types: { Username: [(value: string) => string, (value: string) => boolean] };
 export class ForbiddenError extends Error {}
 
 export const DomainModel: {

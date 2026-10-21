@@ -1,6 +1,7 @@
+import { AccountManagement } from './src/account-management';
 import { disableNativeDomainManagement } from './src/native-domains';
 import { OrganizationService } from './src/organization';
-import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel } from 'hydrooj';
+import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel, TokenModel, Types } from 'hydrooj';
 import { HydroAccounts } from './src/accounts';
 import { StudentService } from './src/service';
 import { SmsError } from './src/types';
@@ -16,6 +17,15 @@ export async function apply(ctx: Context) {
     join: (id, uid, joined) => DomainModel.setJoin(id, uid, joined),
   });
   await organization.init();
+  const accounts = new AccountManagement(ctx.db.db, service, {
+    create: (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT),
+    rename: (uid, username) => UserModel.setUname(uid, username), password: (uid, password) => UserModel.setPassword(uid, password),
+    privileges: (uid, priv) => UserModel.setPriv(uid, priv), revoke: (uid) => TokenModel.delByUid(uid),
+    normalizeUsername: (value) => { if (!Types.Username[1](value)) throw new SmsError(400, '用户名无效'); return Types.Username[0](value); },
+    profilePrivilege: PRIV.PRIV_USER_PROFILE, defaultPrivileges: PRIV.PRIV_DEFAULT,
+  });
+  await accounts.init();
+  ctx.on('handler/before-prepare', async handler => { if (handler.user?._id > 0) await organization.ensureMainMembers(handler.user._id); });
   disableNativeDomainManagement(ctx);
 
   function privateResponse(handler: Handler) {
@@ -27,7 +37,7 @@ export async function apply(ctx: Context) {
       this.checkPriv(PRIV.PRIV_USER_PROFILE);
       privateResponse(this);
       this.response.template = 'sms_panel.html';
-      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes') };
+      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts') };
     }
   }
   class SmsApiHandler extends Handler {
@@ -81,6 +91,15 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.filterOptions(this.user._id)); }
   }
 
+  class SmsAccountsHandler extends SmsApiHandler {
+    async get() { await this.run(() => accounts.list(this.user._id, this.context.query.q, this.context.query.enabled, this.context.query.page)); }
+    async post() { await this.run(() => accounts.create(this.user._id, this.body())); }
+  }
+  class SmsAccountHandler extends SmsApiHandler {
+    async post() { await this.run(() => accounts.update(this.user._id, this.context.params.uid, this.body())); }
+  }
+  ctx.Route('sms_api_accounts', '/sms/api/accounts', SmsAccountsHandler);
+  ctx.Route('sms_api_account', '/sms/api/accounts/:uid', SmsAccountHandler);
   class SmsDomainsHandler extends SmsApiHandler {
     async get() { await this.run(() => organization.domainList(this.user._id)); }
     async post() { await this.run(() => organization.domainSave(this.user._id, this.body())); }
