@@ -1,3 +1,4 @@
+import { ScheduleBatchService } from './src/schedule-batch';
 import { ExportService } from './src/exports';
 import { StudentImportService } from './src/student-import';
 import { BulkService } from './src/bulk';
@@ -45,7 +46,9 @@ export async function apply(ctx: Context) {
   installRating(ctx, rating, organization);
   const teaching = new TeachingService(ctx.db.db, service, organization, rating);
   await teaching.init();
-  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport);
+  const scheduleBatches = new ScheduleBatchService(ctx.db.db, service, organization, teaching);
+  await scheduleBatches.init();
+  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport, scheduleBatches);
   UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
@@ -212,6 +215,20 @@ export async function apply(ctx: Context) {
   class SmsScheduleBoardHandler extends SmsApiHandler {
     async get() { await this.run(() => teaching.scheduleBoard(this.user._id, this.context.query.teacherUid, this.context.query.from, this.context.query.to)); }
   }
+  class SmsScheduleBatchHandler extends SmsApiHandler {
+    async get() { await this.run(() => scheduleBatches.history(this.user._id)); }
+    async post() { await this.run(() => scheduleBatches.preview(this.user._id, this.body())); }
+  }
+  class SmsScheduleBatchParseHandler extends SmsApiHandler { async post() { await this.run(() => scheduleBatches.parse(this.user._id, this.body())); } }
+  class SmsScheduleBatchDetailHandler extends SmsApiHandler {
+    async get() { await this.run(() => scheduleBatches.detail(this.user._id, this.context.params.batch)); }
+    async post() { await this.run(() => scheduleBatches.confirm(this.user._id, this.context.params.batch)); }
+  }
+  class SmsScheduleBatchCancelHandler extends SmsApiHandler { async post() { await this.run(() => scheduleBatches.cancel(this.user._id, this.context.params.batch)); } }
+  ctx.Route('sms_api_schedule_batch_parse','/sms/api/teaching/schedule-batches/parse',SmsScheduleBatchParseHandler);
+  ctx.Route('sms_api_schedule_batch','/sms/api/teaching/schedule-batches',SmsScheduleBatchHandler);
+  ctx.Route('sms_api_schedule_batch_detail','/sms/api/teaching/schedule-batches/:batch',SmsScheduleBatchDetailHandler);
+  ctx.Route('sms_api_schedule_batch_cancel','/sms/api/teaching/schedule-batches/:batch/cancel',SmsScheduleBatchCancelHandler);
   ctx.Route('sms_api_schedule_board', '/sms/api/teaching/schedules', SmsScheduleBoardHandler);
   class SmsTeachingClassesHandler extends SmsApiHandler {
     async get() { await this.run(() => teaching.classes(this.user._id)); }

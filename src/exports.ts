@@ -1,6 +1,7 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import * as XLSX from 'xlsx';
 import { Db, Document } from 'mongodb';
+import { ScheduleBatchService } from './schedule-batch';
 import { StudentService } from './service';
 import { OrganizationService } from './organization';
 import { TeachingService } from './teaching';
@@ -30,7 +31,7 @@ export async function collectExport<T>(read:(page:number)=>Promise<{total:number
  return rows;
 }
 export class ExportService {
- constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService,private rating:RatingService,private accounts:AccountManagement,private bulk:BulkService,private imports:StudentImportService){}
+ constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService,private rating:RatingService,private accounts:AccountManagement,private bulk:BulkService,private imports:StudentImportService,private batches?:ScheduleBatchService){}
  async build(actor:number,kind:string,q:Record<string,unknown>,domain='system'):Promise<ExportTable>{
   const all=collectExport;
   if(kind==='students'){
@@ -55,6 +56,11 @@ export class ExportService {
    const j=await this.imports.detail(actor,text(q.id,100,'批次 ID'));const items=j.items!;
    if(kind==='import-accounts')return {name:'导入学生账号',headers:['姓名','UID','用户名','初始密码'],rows:items.filter(i=>i.done).map(i=>[i.basic.name,i.hydroUid,i.username,i.accountCreated?i.username:''])};
    return {name:'学生导入结果',headers:['文件行','姓名','年级','学校','学生状态','UID','用户名','识别结果','选择导入','执行结果','原因'],rows:items.map(i=>[i.row,i.basic.name,i.basic.grade,i.basic.school,i.basic.status,i.hydroUid,i.username,({create:'新增',bind:'绑定已有档案',duplicate:'重复',suspect:'疑似重复',error:'错误'}as Record<string,string>)[i.kind]||i.kind,i.selected?'是':'否',i.done?'已完成':'未执行',i.error||i.reason])};
+  }
+  if(kind==='schedule-batch-result'||kind==='schedule-batch-conflicts'){
+   if(!this.batches)throw new SmsError(400,'批量排课不可用');const j=await this.batches.detail(actor,text(q.id,100,'批次 ID'));
+   if(kind==='schedule-batch-conflicts')return {name:'排课冲突展示',headers:['文件行','日期','开始时间','结束时间','原因','来源','对方文件行','对方子域','对方排课','对方开始','对方结束'],rows:j.conflicts.map(c=>[c.row,c.date,c.start,c.end,c.reasons.join('、'),c.source==='batch'?'本批排课':'既有排课',c.otherRow,c.otherDomainId,c.otherTitle,c.otherStart,c.otherEnd])};
+   return {name:'批量排课检查结果',headers:['文件行','班级','子域 ID','排课名称','教师','教师 UID','开始日期','结束日期','每周时段','状态','课次数','校验错误','批次状态','本批冲突总数'],rows:j.entries.map(e=>[e.row,e.className,e.domainId,e.data?.title||e.inputTitle,e.teacherName,e.data?.teacherUid,e.data?.from,e.data?.to,e.data?.slots.map(s=>`周${'一二三四五六日'[s.weekday-1]} ${s.start}–${s.end}`).join('；'),e.data?.status,e.count,e.error,j.status,j.conflictCount])};
   }
   const teachingKinds=['courses','attendance','attendance-summary','schedule','plans','class-summary','class-rating','rating-timeline','contest-analysis','contests'];
   if(teachingKinds.includes(kind)){

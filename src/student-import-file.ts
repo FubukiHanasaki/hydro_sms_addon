@@ -8,7 +8,7 @@ const aliases: Record<string, string[]> = { name:['姓名','学生姓名','学�
 export interface FileRow { row:number; values:string[]; errors:string[] }
 export interface ParsedFile { sheets:string[];sheet:string;headers:string[];rows:FileRow[] }
 export function guessMapping(headers:string[]) { const result:Record<string,number>={};for(const [key,names]of Object.entries(aliases)){const matches=headers.flatMap((v,n)=>names.some(a=>a.toLowerCase()===v.replace(/^\uFEFF/,'').trim().toLowerCase())?[n]:[]);if(matches.length===1)result[key]=matches[0];}return result; }
-export async function parseStudentFile(value:unknown):Promise<ParsedFile & {mapping:Record<string,number>;fields:typeof IMPORT_FIELDS}> {
+export async function parseTableFile(value:unknown):Promise<ParsedFile> {
   const b=object(value);if(Object.keys(b).some(k=>!['filename','content','sheet'].includes(k)))throw new SmsError(400,'请求包含未知字段');
   const name=text(b.filename,160,'文件名'),ext=name.split('.').at(-1)?.toLowerCase();if(!ext||!['xlsx','xls','csv'].includes(ext))throw new SmsError(400,'请选择 XLSX、XLS 或 CSV 文件');
   if(typeof b.content!=='string'||b.content.length>2800000||!b.content.length||(b.content.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(b.content)))throw new SmsError(400,'文件编码无效或超过 2 MB');
@@ -20,5 +20,7 @@ export async function parseStudentFile(value:unknown):Promise<ParsedFile & {mapp
     worker.once('message',(message:ParsedFile & {error?:string})=>{clearTimeout(timer);void worker.terminate();if(message.error)reject(new SmsError(400,message.error));else resolve(message);});
     worker.once('error',()=>{clearTimeout(timer);reject(new SmsError(400,'表格过大或无法解析，请检查文件'));});worker.once('exit',code=>{clearTimeout(timer);if(code!==0)reject(new SmsError(400,'文件解析未完成'));});
   });
-  return {...result,mapping:guessMapping(result.headers),fields:IMPORT_FIELDS};
+  return result;
 }
+
+export async function parseStudentFile(value:unknown){const result=await parseTableFile(value);return {...result,mapping:guessMapping(result.headers),fields:IMPORT_FIELDS};}

@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=exports-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=schedule-batch-20261021">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -97,15 +97,16 @@
   </dialog>
 </div>
 <script src="/sms-addon/exports.js?build=exports-20261021" defer></script>
-<script src="/sms-addon/panel.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=schedule-batch-20261021" defer></script>
 <script src="/sms-addon/organization.js?build=exports-20261021" defer></script>
 <script src="/sms-addon/accounts.js?build=exports-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
 <script src="/sms-addon/rating.js?build=exports-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/teaching.css?build=timeline-teachers-20261021">
 <script src="/sms-addon/schedule-layout.js?build=timeline-teachers-20261021" defer></script>
-<script src="/sms-addon/teaching.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/teaching.js?build=schedule-batch-20261021" defer></script>
 <script src="/sms-addon/teachers.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/bulk.js?build=exports-20261021" defer></script>
 <script src="/sms-addon/student-import.js?build=exports-20261021" defer></script>
+<script src="/sms-addon/schedule-batch.js?build=schedule-batch-20261021" defer></script>
 {% endblock %}

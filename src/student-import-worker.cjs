@@ -51,7 +51,8 @@ try {
           if (cell.f || cell.t === 'e') { (errors[r + 1] ||= []).push(`第 ${col + 1} 列含公式或错误，请改为值`); }
           else if (cell.t === 'n' && XLSX.SSF.is_date(cell.z || '')) {
             const date = XLSX.SSF.parse_date_code(cell.v, { date1904: !!book.Workbook?.WBProps?.date1904 });
-            if (date) value = `${date.y}-${String(date.m).padStart(2,'0')}-${String(date.d).padStart(2,'0')}`;
+            if(date && /[hs]/i.test(cell.z||'') && !/[yd]/i.test(cell.z||'')) value=`${String(date.H).padStart(2,'0')}:${String(date.M).padStart(2,'0')}`;
+            else if (date) value = `${date.y}-${String(date.m).padStart(2,'0')}-${String(date.d).padStart(2,'0')}`;
           } else if (cell.v != null) value = cell.t === 'n' && (!cell.z || cell.z === 'General') ? String(cell.v) : XLSX.utils.format_cell(cell);
         }
         row.push(String(value).trim());

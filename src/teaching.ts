@@ -16,7 +16,7 @@ export class TeachingService extends TeachingPlanner {
     const last = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).toISOString().slice(0, 10);
     const dates = range(from || `${today.slice(0, 7)}-01`, to || last);
     const visible = await this.organization.domainList(actor), ids = visible.map(c => c._id);
-    const plans = await this.plans.find({ domainId: { $in: ids } }).toArray();
+    const plans = await this.publishedPlans({ domainId: { $in: ids } });
     const metadata = await this.organization.classes.find({ domainId: { $in: ids } }).toArray();
     const memberships = await this.store.collection('domain.user').find({ domainId: { $in: ids }, join: true }).project({ domainId: 1, uid: 1 }).toArray();
     const classes = visible.map(c => ({ id: c._id, name: c.name || c._id, teacherUids: (metadata.find(m => m.domainId === c._id)?.teacherUids ?? []).filter(uid => memberships.some(m => m.domainId === c._id && m.uid === uid)) }));
@@ -37,7 +37,7 @@ export class TeachingService extends TeachingPlanner {
     const last = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).toISOString().slice(0, 10);
     const period = range(from || `${month}-01`, to || last, 92);
     const detail = await this.organization.classDetail(actor, domainId);
-    const plans = await this.plans.find({ domainId }).toArray();
+    const plans = await this.publishedPlans({ domainId });
     const rawCourses = await this.records.find({ domainId, date: { $gte: period.from, $lte: period.to } }).sort({ date: -1, start: -1 }).toArray();
     const courses = rawCourses.map(({ updatedBy, requestHash, ...c }) => ({ ...c, attendance: c.attendance.filter(a => ctx.staff || a.uid === actor) }));
     const lessons = await this.instances(domainId, period.from, period.to);

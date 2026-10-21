@@ -13,8 +13,8 @@ function time(value: unknown) { const s = text(value, 5, '时间'); if (!/^([01]
 export function period(from: unknown, to: unknown, max = 92) { const a = date(from), b = date(to); if (Date.parse(b) < Date.parse(a) || Date.parse(b) - Date.parse(a) > max * 86400000) fail(`查询或排课范围不能超过 ${max + 1} 天`); return { from: a, to: b }; }
 const revision = (n: unknown) => { if (!Number.isSafeInteger(n) || (n as number) < 0) return fail('版本无效'); return n as number; };
 interface Slot { id: string; weekday: number; start: string; end: string }
-interface PlanData { from: string; to: string; title: string; teacherUid: number; location: string; color: string; status: 'active' | 'draft' | 'paused'; slots: Slot[]; remark: string; makeupFor: string }
-interface Plan { _id: string; domainId: string; version: number; revisions: PlanData[]; fingerprint?: string; updatedBy: number; updatedAt: Date }
+export interface PlanData { from: string; to: string; title: string; teacherUid: number; location: string; color: string; status: 'active' | 'draft' | 'paused'; slots: Slot[]; remark: string; makeupFor: string }
+export interface Plan { batchId?: string; _id: string; domainId: string; version: number; revisions: PlanData[]; fingerprint?: string; updatedBy: number; updatedAt: Date }
 interface Row { uid: number; status: string; remark: string }
 export interface Lesson { id: string; planId: string; domainId: string; originalDate: string; date: string; start: string; end: string; title: string; teacherUid: number; location: string; color: string; status: 'planned' | 'draft' | 'cancelled' | 'completed'; version: string; makeupFor: string; courseId?: string }
 interface Adjustment { _id: string; domainId: string; lesson: Lesson; version: number }
@@ -25,7 +25,7 @@ export class TeachingPlanner {
  get records() { return this.db.collection<Actual>('sms_teaching_records'); }
  get adjustments() { return this.db.collection<Adjustment>('sms_teaching_adjustments'); }
  async init() {
-  await this.plans.createIndex({ domainId: 1 }); await this.records.createIndex({ domainId: 1, date: -1 });
+  await this.plans.createIndex({ batchId: 1 });await this.plans.createIndex({ domainId: 1 }); await this.records.createIndex({ domainId: 1, date: -1 });
   await this.records.createIndex({ domainId: 1, lessonId: 1 }, { unique: true, partialFilterExpression: { lessonId: { $type: 'string' } } });
   await this.adjustments.createIndex({ domainId: 1 });
   // Preserve records from the first prototype without reinterpreting a catalog as actual teaching.
@@ -59,7 +59,7 @@ export class TeachingPlanner {
   } return out;
  }
  async instances(domainId: string | null, from: string, to: string) {
-  const filter = domainId ? { domainId } : {}, plans = await this.plans.find(filter).toArray(), overrides = await this.adjustments.find(filter).toArray();
+  const filter = domainId ? { domainId } : {}, plans = await this.publishedPlans(filter), overrides = await this.adjustments.find(filter).toArray();
   const map = new Map(plans.flatMap(p => this.build(p, from, to)).map(l => [l.id, l]));
   for (const a of overrides) { if (a.lesson.date >= from && a.lesson.date <= to) map.set(a._id, { ...a.lesson, version: digest([a._id, a.version, a.lesson, plans.find(p => p._id === a.lesson.planId)?.version]) }); else map.delete(a._id); }
   const records = await this.records.find(filter).toArray();
@@ -81,15 +81,12 @@ export class TeachingPlanner {
   const overlap = (a: Lesson, b: Lesson) => a.date === b.date && a.start < b.end && b.start < a.end && (a.domainId === b.domainId || a.teacherUid === b.teacherUid || !!a.location && a.location === b.location);
   for (let i = 0; i < active.length; i++) { const a = active[i]; if (active.slice(0, i).some(b => overlap(a, b)) || old.some(b => b.id !== excludeLesson && (b.planId !== excludePlan || b.status === 'completed') && ['planned', 'completed'].includes(b.status) && overlap(a, b))) fail(`${a.date} ${a.start}–${a.end} 班级、教师或教室冲突`, 409); }
  }
- async savePlan(actor: number, domainId: string, value: unknown) {
-  const b = object(value); this.org.fields(b, ['id','version','title','teacherUid','location','color','status','from','to','slots','remark','makeupFor','requestId','preview','previewToken']);
-  return this.org.locked('__sms_teaching__', async verify => {
-   const ctx = await this.context(actor, domainId, true, true); domainId = ctx.domain._id; if (ctx.meta?.status === 'archived') fail('归档班级不能排课');
-   const requestId = text(b.requestId, 80, '请求标识'); if (!/^[\w-]{8,80}$/.test(requestId)) fail('请求标识无效');
-   const id = b.id ? text(b.id, 160, '排课 ID') : `plan:${domainId}:${requestId}`, old = await this.plans.findOne({ _id: id, domainId });
-   const inputHash = digest({ ...b, preview: undefined, previewToken: undefined });
-   if (!b.id && old) { if (old.fingerprint !== inputHash) fail('请求标识已使用', 409); return { saved: true, id }; }
-   if (b.id && !old) return fail('排课不存在', 404); if ((old?.version ?? 0) !== revision(b.version)) fail('排课已更新，请刷新', 409);
+ async publishedPlans(filter: Record<string,unknown> = {}) {
+  const committed = await this.db.collection('sms_schedule_batches').find({status:'committed'},{projection:{_id:1}}).toArray();
+  return this.plans.find({$and:[filter,{$or:[{batchId:{$exists:false}},{batchId:{$in:committed.map(j=>String(j._id))}}]}]}).toArray();
+ }
+ async normalizePlan(actor:number,domainId:string,b:Record<string,unknown>,old?:Plan|null) {
+  const ctx=await this.context(actor,domainId,true,true);domainId=ctx.domain._id;if(ctx.meta?.status==='archived')fail('归档班级不能排课');
    const r = period(b.from, b.to, 730), title = text(b.title, 100, '排课名称'); if (!title) fail('请填写排课名称');
    if (old && r.from < old.revisions.at(-1)!.from) fail('生效日期不能早于最近一次排课修改');
    if (!['active','draft','paused'].includes(String(b.status))) fail('排课状态无效');
@@ -99,6 +96,18 @@ export class TeachingPlanner {
    for (let i=0;i<slots.length;i++) if (slots.slice(0,i).some(s=>s.weekday===slots[i].weekday && s.start<slots[i].end && slots[i].start<s.end)) fail('每周时段不能重叠');
    const makeupFor = text(b.makeupFor ?? '', 200, '补课来源'); if (makeupFor) await this.resolve(domainId, makeupFor);
    const data: PlanData = { ...r, title, teacherUid: await this.teacher(domainId,b.teacherUid), location:text(b.location??'',160,'地点'), color:['blue','cyan','violet','amber','rose','green'].includes(String(b.color))?String(b.color):'blue', status:b.status as PlanData['status'], slots, remark:text(b.remark??'',1000,'排课备注'), makeupFor };
+  return {ctx,data};
+ }
+ async savePlan(actor: number, domainId: string, value: unknown) {
+  const b = object(value); this.org.fields(b, ['id','version','title','teacherUid','location','color','status','from','to','slots','remark','makeupFor','requestId','preview','previewToken']);
+  return this.org.locked('__sms_teaching__', async verify => {
+   const ctx = await this.context(actor, domainId, true, true); domainId = ctx.domain._id; if (ctx.meta?.status === 'archived') fail('归档班级不能排课');
+   const requestId = text(b.requestId, 80, '请求标识'); if (!/^[\w-]{8,80}$/.test(requestId)) fail('请求标识无效');
+   const id = b.id ? text(b.id, 160, '排课 ID') : `plan:${domainId}:${requestId}`, old = (await this.publishedPlans({ _id: id, domainId }))[0];
+   const inputHash = digest({ ...b, preview: undefined, previewToken: undefined });
+   if (!b.id && old) { if (old.fingerprint !== inputHash) fail('请求标识已使用', 409); return { saved: true, id }; }
+   if (b.id && !old) return fail('排课不存在', 404); if ((old?.version ?? 0) !== revision(b.version)) fail('排课已更新，请刷新', 409);
+   const { data } = await this.normalizePlan(actor,domainId,b,old);
    const candidate: Plan = { _id:id, domainId, version:(old?.version??0)+1, revisions:[...(old?.revisions.filter(r=>r.from<data.from)??[]),data], fingerprint:inputHash,updatedBy:actor,updatedAt:new Date() };
    const lessons = this.build(candidate,data.from,data.to);
    // Completed teaching snapshots survive plan changes and do not get regenerated.
