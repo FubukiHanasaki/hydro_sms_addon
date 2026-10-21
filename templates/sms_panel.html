@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=accounts-members-v2-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=concise-copy-20261021">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -10,7 +10,7 @@
         <div class="section__tools"><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
       </div>
       <div class="section__body">
-        <p id="sms-summary" class="help-text">正在加载可访问的学生资料</p>
+        <p id="sms-summary" class="help-text">加载中…</p>
         <form id="sms-search-form" class="sms-toolbar">
           <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名" maxlength="80" aria-label="搜索姓名">
           <select id="sms-status" class="select" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
@@ -23,7 +23,7 @@
       </div>
       <div class="section__body no-padding"><div class="section__table-container sms-table-scroll">
         <table class="data-table sms-table"><colgroup><col style="width:22%"><col style="width:22%"><col style="width:15%"><col style="width:10%"><col style="width:15%"><col style="width:16%"></colgroup><thead><tr><th>学生</th><th>年级 / 学校</th><th>学习阶段</th><th>状态</th><th>Hydro 账号</th><th>操作</th></tr></thead><tbody id="sms-student-rows"></tbody></table>
-      </div><div id="sms-empty" class="sms-empty" hidden><p>暂无可查看的学生档案</p><p class="help-text">绑定学生账号或由插件管理员授权后，资料会显示在这里。</p></div></div>
+      </div><div id="sms-empty" class="sms-empty" hidden><p>暂无学生档案</p></div></div>
       <div class="section__body sms-pagination"><span id="sms-page-label" class="help-text"></span><div><button type="button" id="sms-prev" class="rounded button">上一页</button><button type="button" id="sms-next" class="rounded button">下一页</button></div></div>
     </section>
     <section id="sms-organization-section" class="section visible" hidden>
@@ -34,7 +34,7 @@
     </section>
     <section id="sms-accounts-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">账户管理</h1><div class="section__tools"><button type="button" id="sms-account-create" class="primary rounded button">＋ 创建账号</button></div></div>
-      <div class="section__body"><form id="sms-account-search-form" class="sms-org-toolbar"><input id="sms-account-query" type="search" class="textbox" placeholder="用户名、学生姓名或 UID" aria-label="搜索账号"><select id="sms-account-enabled" class="select" aria-label="账号启用状态"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-account-summary" class="help-text"></p><p class="help-text">密码重置和停用会使旧会话失效。内置账号、插件管理员及带额外 Hydro 权限的账号为只读。</p></div>
+      <div class="section__body"><form id="sms-account-search-form" class="sms-org-toolbar"><input id="sms-account-query" type="search" class="textbox" placeholder="用户名、学生姓名或 UID" aria-label="搜索账号"><select id="sms-account-enabled" class="select" aria-label="账号启用状态"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-account-summary" class="help-text"></p></div>
       <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table"><thead><tr><th>账号</th><th>关联学生</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-account-rows"></tbody></table></div></div>
       <div class="section__body sms-pagination"><span id="sms-account-page" class="help-text"></span><div><button type="button" id="sms-account-prev" class="rounded button">上一页</button><button type="button" id="sms-account-next" class="rounded button">下一页</button></div></div>
     </section>
@@ -42,13 +42,11 @@
       <section class="section visible">
         <div class="section__header"><h1 class="section__title">访问授权</h1></div>
         <div class="section__body">
-          <p class="help-text">查看、敏感信息、编辑和账号绑定分别授权。</p>
           <form id="sms-grant-form">
-            <div class="sms-form-grid"><label>Hydro UID<input class="textbox" type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>授权失效时间（北京时间）<input class="textbox" type="datetime-local" id="sms-grant-expires"><span class="help-text">留空表示长期有效</span></label></div>
+            <div class="sms-form-grid"><label>Hydro UID<input class="textbox" type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>失效时间（选填，北京时间）<input class="textbox" type="datetime-local" id="sms-grant-expires"></label></div>
             <fieldset class="sms-checks"><legend>允许的操作</legend><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" checked disabled> 查看基本资料</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.sensitive" name="sms-permission"> 查看敏感资料与内部备注</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.write" name="sms-permission"> 编辑资料</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.bind" name="sms-permission"> 绑定 / 解绑 Hydro 账号</label></div></fieldset>
             <label class="sms-field">学生范围<select class="select" id="sms-grant-scope"><option value="all">全部学生</option><option value="selected">指定学生</option></select></label>
             <div id="sms-grant-students" hidden><label class="sms-field">查找学生<input class="textbox" id="sms-scope-search" type="search" placeholder="输入姓名"></label><div id="sms-selected-students" class="sms-chips"></div><div id="sms-scope-options" class="sms-scope-options"></div></div>
-            <p class="help-text">敏感资料编辑需同时具备编辑与敏感资料权限。授权立即生效，撤销后下次请求立即失效。</p>
             <button class="primary rounded button" type="submit">保存授权</button>
           </form>
         </div>
@@ -57,7 +55,6 @@
     </div>
     <section id="sms-audit-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">操作记录</h1><div class="section__tools"><button id="sms-refresh-audit" class="rounded button" type="button"><span class="icon icon-refresh"></span> 刷新</button></div></div>
-      <div class="section__body"><p class="help-text">最近 100 条记录。仅记录操作者、操作和字段名称，不保存敏感字段内容。</p></div>
       <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table sms-audit-table"><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody id="sms-audit-rows"></tbody></table></div></div>
     </section>
   </div>
@@ -69,7 +66,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
     </ol></section>
-    <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">正在确认访问权限…</p><p class="help-text">学生本人可查看自己的资料。其他访问由插件管理员单独授权。</p></div></section>
+    <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">加载中…</p></div></section>
     <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.2.0</p></div></div>
   </aside>
   <dialog id="sms-student-dialog" class="section visible sms-dialog" aria-labelledby="sms-dialog-title">
@@ -86,7 +83,7 @@
     <form id="sms-account-form"><header class="section__header sms-dialog-header"><h1 id="sms-account-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-account-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-account-error" class="help-text" role="alert"></p><div id="sms-account-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-account-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-account-save">确认保存</button></div></footer></form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?build=accounts-members-v2-20261021" defer></script>
-<script src="/sms-addon/organization.js?build=accounts-members-v2-20261021" defer></script>
-<script src="/sms-addon/accounts.js?build=accounts-members-v2-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=concise-copy-20261021" defer></script>
+<script src="/sms-addon/organization.js?build=concise-copy-20261021" defer></script>
+<script src="/sms-addon/accounts.js?build=concise-copy-20261021" defer></script>
 {% endblock %}

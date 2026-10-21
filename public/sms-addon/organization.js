@@ -27,7 +27,7 @@
       const link = el('a', 'link sms-link', '进入子域 ↗'); link.href = `/d/${encodeURIComponent(c.domainId)}/`; group.append(link); actions.append(group); row.append(actions); rows.append(row);
     }
     if (!result.total) { const row = el('tr'); const cell = el('td', 'help-text', '暂无符合条件的班级与子域'); cell.colSpan = 5; row.append(cell); rows.append(row); }
-    $('sms-class-summary').textContent = `共 ${result.total} 个班级与子域 · 名称、说明和成员统一管理`;
+    $('sms-class-summary').textContent = `共 ${result.total} 个班级与子域`;
     $('sms-class-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(result.total / 20))} 页`;
     $('sms-class-prev').disabled = page <= 1; $('sms-class-next').disabled = page * 20 >= result.total;
   }
@@ -47,14 +47,13 @@
     if (!me.admin) {
       for (const [label, value] of [['子域 ID', c.domainId], ['班型', c.type], ['学年', c.academicYear], ['上课安排', c.schedule], ['地点', c.location], ['说明', c.description], ['状态', c.status === 'active' ? '开班中' : '已归档'], ['任课教师', c.teachers.map(t => t.username).join('、')]]) root.append(el('p', 'sms-org-value', `${label}：${value || '未填写'}`)); return;
     }
-    if (c?.syncState !== 'ready' && c) root.append(el('p', 'help-text', '上一次保存尚未完成，请核对当前资料后重新保存。'));
+    if (c?.syncState !== 'ready' && c) root.append(el('p', 'help-text', '上次保存未完成，请核对后重试。'));
     const grid = el('div', 'sms-form-grid'); root.append(grid); const inputs = {};
     inputs.name = field(grid, 'class-name', '班级与子域名称 *', c?.name || '', null, true); inputs.name.maxLength = 100;
     inputs.domainId = field(grid, 'domain-id', '子域 ID *', c?.domainId || '', null, true); inputs.domainId.disabled = !!c; inputs.domainId.maxLength = 64;
     for (const [key, label] of [['type', '班型'], ['academicYear', '学年'], ['schedule', '上课安排（选填）'], ['location', '上课地点']]) inputs[key] = field(grid, key, label, c?.[key] || '');
     inputs.status = field(grid, 'class-lifecycle', '状态', c?.status || 'active', [['active', '开班中'], ['archived', '已归档']]);
     const label = el('label', 'sms-field', '说明 / 子域公告'); inputs.description = el('textarea', 'textbox'); inputs.description.id = 'sms-org-description'; inputs.description.value = c?.description || ''; inputs.description.maxLength = 5000; label.append(inputs.description); root.append(label);
-    root.append(el('p', 'help-text', '名称和说明同步用于 Hydro 子域。保存后可在「成员」中添加账号、分配教师；学生账号绑定档案后自动显示为学生。'));
     save = async () => { const data = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value])); data.version = c?.version ?? 0; data.createDomain = !c; await api(c ? `${app.dataset.classes}/${encodeURIComponent(c._id)}` : app.dataset.classes, data); $('sms-org-dialog').close(); await loadClasses(); };
   }
   async function members(id) {
@@ -78,7 +77,6 @@
         catch (e) { await load(); throw e; } finally { busy = false; confirm.toggleAttribute('data-disabled', !selectedUser); confirm.disabled = !selectedUser; }
       }, 'primary rounded button'); confirm.id = 'sms-member-confirm-add'; confirm.disabled = true; confirm.setAttribute('data-disabled', '');
       const controls = el('div', 'sms-member-add-actions'); controls.append(selected, confirm); add.append(results, controls); root.prepend(add);
-      if (id === 'system') add.append(el('p', 'help-text sms-main-member-hint', '主域所有账号默认加入，无需学生档案。选择账号和身份后点击确认添加，可更新其成员身份。'));
       let timer; let accountRequest = 0;
       const search = async () => { const current = ++accountRequest; if (!addQuery.value.trim()) { results.replaceChildren(); return; } const url = new URL(app.dataset.users, location.origin); url.search = new URLSearchParams({ q: addQuery.value.trim() }); const users = await api(url); if (current !== accountRequest || activeDialog !== dialogSerial) return;
         results.replaceChildren(); for (const user of users) results.append(button(`${user.username} · UID ${user.uid}`, () => { selectedUser = user; selected.textContent = `已选择 ${user.username}（UID ${user.uid}）`; confirm.disabled = false; confirm.removeAttribute('data-disabled'); results.replaceChildren(); })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));
@@ -91,7 +89,7 @@
         const url = new URL(`${app.dataset.domains}/${encodeURIComponent(id)}/members`, location.origin); url.search = new URLSearchParams({ q: query.value, page: memberPage });
         const data = await api(url); if (current !== serial || activeDialog !== dialogSerial) return;
         if (memberPage > 1 && !data.members.length) { memberPage = Math.max(1, Math.ceil(data.total / 20)); return load(); }
-        version = data.version; summary.textContent = `共 ${data.total} 名成员${me.admin ? ' · 班级与子域共用此名册' : ''}`; list.replaceChildren();
+        version = data.version; summary.textContent = `共 ${data.total} 名成员`; list.replaceChildren();
         for (const m of data.members) {
           const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.studentName || m.username), el('div', 'sms-secondary', `${m.studentName ? `${m.username} · ` : ''}UID ${m.uid}`));
           row.append(person); const actions = el('div', 'sms-member-actions');
@@ -102,7 +100,7 @@
             apply.disabled = true; apply.setAttribute('aria-label', `保存 ${m.username} 的身份`); identity.addEventListener('change', () => { apply.disabled = identity.value === m.kind; }); actions.append(apply);
           } else row.append(el('span', 'sms-member-kind', ({ teacher: '任课教师', student: '学生', member: '普通成员' })[m.kind]));
           if (m.canRemove) actions.append(button('移除', async () => { if (busy) return; busy = true; try { await api(url.pathname, { uid: m.uid, joined: false, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } }));
-          else actions.append(el('span', 'help-text', m.uid === c.owner ? '所有者' : id === 'system' ? '默认加入' : ''));
+          else if (m.uid === c.owner) actions.append(el('span', 'help-text', '所有者'));
           row.append(actions); list.append(row);
         }
         if (!data.members.length) list.append(el('p', 'sms-empty', '没有符合条件的成员'));

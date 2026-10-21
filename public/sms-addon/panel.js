@@ -98,10 +98,9 @@
     $('sms-empty').hidden = state.students.length !== 0;
     const filtered = ['sms-search', 'sms-status', 'sms-grade', 'sms-domain', 'sms-school'].some((id) => $(id).value.trim());
     const empty = $('sms-empty');
-    empty.querySelector('p').textContent = filtered ? '没有符合筛选条件的学生' : '暂无可查看的学生档案';
-    empty.querySelector('.help-text').textContent = filtered ? '请调整条件或点击「重置」查看全部可访问学生。' : '绑定学生账号或由插件管理员授权后，资料会显示在这里。';
-    $('sms-summary').textContent = `共 ${state.total} 名可访问学生 · 资料按最近更新时间排列`;
-    $('sms-page-label').textContent = `第 ${state.page} / ${Math.max(1, Math.ceil(state.total / 20))} 页 · 每页 20 条`;
+    empty.querySelector('p').textContent = filtered ? '没有符合筛选条件的学生' : '暂无学生档案';
+    $('sms-summary').textContent = `共 ${state.total} 名学生`;
+    $('sms-page-label').textContent = `第 ${state.page} / ${Math.max(1, Math.ceil(state.total / 20))} 页`;
     $('sms-prev').disabled = state.page <= 1;
     $('sms-next').disabled = state.page * 20 >= state.total;
   }
@@ -136,7 +135,7 @@
           });
           results.append(button);
         }
-        if (!users.length) results.append(element('p', 'help-text', state.current ? '没有匹配的账号，请核对用户名或 UID。' : '没有匹配的账号，可清空 UID 自动创建新账号。'));
+        if (!users.length) results.append(element('p', 'help-text', '没有匹配的账号'));
       } catch (error) { if (request === accountSearchRequest) results.replaceChildren(element('p', '', error.message)); }
     };
     let timer;
@@ -172,23 +171,20 @@
       const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
       $('sms-dialog-title').textContent = student ? student.basic.name : '新建学生';
       const fields = $('sms-student-fields'); fields.replaceChildren();
-      if (!caps.edit && !caps.bind) fields.append(element('blockquote', 'sms-read-only', '当前以只读方式查看。资料修改请联系获授权的管理人员。'));
       fields.append(fieldGroup('基本资料', basicFields, student?.basic || {}, caps.edit, 'basic'));
       if (caps.sensitive) fields.append(fieldGroup('个人与联系资料', sensitiveFields, student?.sensitive || {}, caps.editSensitive, 'sensitive'));
       if (caps.internalNote) {
         fields.append(element('h2', 'section__title', '内部备注'));
         if (caps.edit) { const note = element('textarea', 'textbox'); note.name = 'internalNote'; note.rows = 3; note.maxLength = 3000; note.value = student?.internalNote || ''; note.setAttribute('aria-label', '内部备注'); fields.append(note); }
         else fields.append(element('p', 'sms-read-value', student?.internalNote || '未填写'));
-        fields.append(element('p', 'help-text', '内部备注不会向学生本人展示。'));
       }
       fields.append(element('h2', 'section__title', 'Hydro 账号关联'));
       if (caps.bind) {
         const label = element('label', 'sms-field', 'Hydro UID'); const input = element('input', 'textbox'); input.type = 'number'; input.min = '1'; input.step = '1'; input.name = 'hydroUid'; input.placeholder = student ? '留空表示解绑账号' : '留空自动创建姓名全拼账号'; input.value = student?.hydroUid || ''; label.append(input); fields.append(label);
-        fields.append(element('p', 'help-text', student ? '绑定后，该 Hydro 用户可查看自己的资料。清空 UID 只解绑，不会创建账号。' : '不填写 UID 时自动创建账号：用户名为姓名全拼，重名追加数字，初始密码与用户名一致。'));
         fields.append(accountSearch(input));
       } else fields.append(element('p', 'sms-read-value', student?.hydroUid ? `UID ${student.hydroUid}` : '未绑定'));
       if (student) {
-        const footnote = element('p', 'help-text', `最近更新：${dateTime(student.updatedAt)} · 档案编号 ${student.id}`); fields.append(footnote);
+        const footnote = element('p', 'help-text', `最近更新：${dateTime(student.updatedAt)}`); fields.append(footnote);
       }
       $('sms-hydro-profile').hidden = !student?.hydroUid;
       if (student?.hydroUid) $('sms-hydro-profile').href = `/user/${student.hydroUid}`;
@@ -215,7 +211,7 @@
     try {
       const result = await api(student ? `${app.dataset.api}/${encodeURIComponent(student.id)}` : app.dataset.api, body);
       $('sms-student-dialog').close();
-      notice(result.generatedAccount ? `学生已创建。Hydro 用户名：${result.generatedAccount.username}，初始密码：${result.generatedAccount.username}，UID：${result.generatedAccount.uid}。` : student ? '学生资料已保存。' : '学生档案已创建，已关联现有账号。');
+      notice(result.generatedAccount ? `学生已创建。Hydro 用户名：${result.generatedAccount.username}，初始密码：${result.generatedAccount.username}，UID：${result.generatedAccount.uid}。` : student ? '学生资料已保存。' : '学生档案已创建。');
       await loadFilterOptions();
       await loadStudents();
     } catch (error) { $('sms-dialog-error').textContent = error.message; $('sms-dialog-error').hidden = false; $('sms-dialog-error').scrollIntoView({ block: 'nearest' }); }
@@ -223,9 +219,9 @@
   }
   async function loadPolicy() {
     state.policy = await api(app.dataset.permissions);
-    $('sms-admin-list').textContent = `插件管理员：${state.policy.admins.map((uid) => `UID ${uid}`).join('、')}。管理员身份由服务器命令管理。`;
+    $('sms-admin-list').textContent = `插件管理员：${state.policy.admins.map((uid) => `UID ${uid}`).join('、')}`;
     const list = $('sms-grant-list'); list.replaceChildren();
-    if (!state.policy.grants.length) list.append(element('p', 'help-text', '暂无追加授权。绑定学生仍可查看本人资料。'));
+    if (!state.policy.grants.length) list.append(element('p', 'help-text', '暂无授权'));
     for (const grant of state.policy.grants) {
       const row = element('div', 'sms-grant-item'); const info = element('div'); const expired = grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now();
       info.append(element('strong', '', `UID ${grant.uid}${expired ? ' · 已失效' : ''}`));
@@ -272,7 +268,7 @@
       checkbox.addEventListener('change', () => { if (checkbox.checked) state.selected.set(student.id, student.name); else state.selected.delete(student.id); renderChips(); });
       label.append(checkbox, document.createTextNode(`${student.name} · ${student.hydroUid ? `UID ${student.hydroUid}` : '未绑定账号'}`)); options.append(label);
     }
-    if (result.total > 20) options.append(element('p', 'help-text', '显示前 20 条，请输入姓名缩小范围。'));
+    if (result.total > 20) options.append(element('p', 'help-text', '仅显示前 20 条'));
     if (!result.total) options.append(element('p', 'help-text', '没有匹配的学生。'));
     renderChips();
   }

@@ -21,7 +21,7 @@
       const profile = el('a', 'link sms-link', '资料页 ↗'); profile.href = `/user/${account.uid}`; group.append(profile); actions.append(group); row.append(actions); rows.append(row);
     }
     if (!data.accounts.length) { const row = el('tr'); const cell = el('td', 'help-text', '没有符合条件的账号'); cell.colSpan = 4; row.append(cell); rows.append(row); }
-    $('sms-account-summary').textContent = `共 ${data.total} 个账号 · 账号使用 Hydro 登录，学生档案和插件授权分别管理`;
+    $('sms-account-summary').textContent = `共 ${data.total} 个账号`;
     $('sms-account-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(data.total / 20))} 页`; $('sms-account-prev').disabled = page <= 1; $('sms-account-next').disabled = page * 20 >= data.total;
   }
   function field(root, id, label, type = 'text', value = '') {
@@ -34,13 +34,13 @@
     let username; let password; let verify;
     if (action === 'create' || action === 'rename') username = field(root, 'sms-edit-account-username', '用户名 *', 'text', account?.username || '');
     if (action === 'create' || action === 'password') { password = field(root, 'sms-edit-account-password', '密码（6–255 个字符）*', 'password'); password.minLength = 6; verify = field(root, 'sms-edit-account-verify', '确认密码 *', 'password'); verify.minLength = 6; }
-    if (action === 'status') root.append(el('p', '', account.enabled ? '确认停用此账号？停用后将退出当前会话，并无法登录。档案、成员关系和历史数据会保留。' : '确认重新启用此账号？启用后可使用原密码登录。'));
-    if (action === 'password') root.append(el('p', 'help-text', '保存后旧密码及旧会话失效，不改变该账号的双重验证设置。'));
+    if (action === 'status') root.append(el('p', '', account.enabled ? '确认停用此账号？停用后将退出登录并无法登录。' : '确认启用此账号？'));
+    if (action === 'password') root.append(el('p', 'help-text', '保存后旧密码和现有会话失效。'));
     const key = action === 'create' ? requestId() : null;
     save = async () => {
       if (password && password.value !== verify.value) throw new Error('两次密码输入不一致');
       const body = action === 'create' ? { username: username.value, password: password.value, requestId: key } : { action, version: account.version, ...(username ? { username: username.value } : {}), ...(password ? { password: password.value } : {}), ...(action === 'status' ? { enabled: !account.enabled } : {}) };
-      const result = await api(action === 'create' ? app.dataset.accounts : `${app.dataset.accounts}/${account.uid}`, body); $('sms-account-dialog').close(); $('sms-notice').hidden = false; $('sms-notice').textContent = action === 'create' ? `账号已创建：${result.username}（UID ${result.uid}），已默认加入主域。` : '账号已更新。'; await load();
+      const result = await api(action === 'create' ? app.dataset.accounts : `${app.dataset.accounts}/${account.uid}`, body); $('sms-account-dialog').close(); $('sms-notice').hidden = false; $('sms-notice').textContent = action === 'create' ? `账号已创建：${result.username}（UID ${result.uid}）。` : '账号已更新。'; await load();
     };
     $('sms-account-dialog').showModal();
   }
