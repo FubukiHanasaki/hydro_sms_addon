@@ -147,9 +147,9 @@
                 return;
             view.d.querySelector('h1').textContent = `${data.username} · Rating`;
             metrics.replaceChildren();
-            for (const [label, value] of [['当前 Rating', number(data.rating)], ['头衔', data.title], ['最高 Rating', number(data.peak)], ['近 30 天', signed(data.recent.delta)]]) {
+            for (const [label, value] of [['当前 Rating', number(data.rating)], ['称号', data.title], ['最高 Rating', number(data.peak)], ['近 30 天', signed(data.recent.delta)]]) {
                 const block = el('div');
-                block.append(el('span', '', label), el('strong', label === '头衔' ? 'sms-rating-tier-value' : '', value));
+                block.append(el('span', '', label), el('strong', label === '称号' ? 'sms-rating-tier-value' : '', value));
                 metrics.append(block);
             }
             const draw = () => chart(plot, period === 'all' ? data.trend : data.trend.filter(p => +new Date(p.at) >= Date.now() - 30 * 86400000), data.tierBands);
@@ -346,7 +346,7 @@
         const block = el('div');
         block.append(el('span', '', label), el('strong', '', value));
         metrics.append(block);
-    } view.body.append(metrics); const t = table(['头衔', '人数'], 'sms-rating-distribution'); for (const tier of boardStats.tiers) {
+    } view.body.append(metrics); const t = table(['称号', '人数'], 'sms-rating-distribution'); for (const tier of boardStats.tiers) {
         const row = el('tr');
         row.append(el('td', '', tier.title), el('td', '', tier.count));
         t.body.append(row);
