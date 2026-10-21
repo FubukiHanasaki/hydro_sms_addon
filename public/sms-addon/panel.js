@@ -11,11 +11,12 @@
   });
   const state = { me: null, page: 1, total: 0, students: [], current: null, policy: null, selected: new Map(), tab: 'students', request: 0 };
   const basicFields = [
-    ['name', '姓名', 'text', true], ['studentNo', '学号'], ['gender', '性别', ['未填写', '男', '女']],
-    ['grade', '年级'], ['school', '学校'], ['status', '学生状态', ['在校', '休学', '离校']],
-    ['campus', '校区'], ['enrollmentDate', '入学日期', 'date'], ['competitionLevel', '竞赛等级'], ['currentStage', '学习阶段'], ['targetLevel', '目标阶段'],
+    ['name', '姓名', 'text', true],
+    ['gender', '性别', ['未填写', '男', '女']], ['grade', '年级'],
+    ['school', '学校'], ['status', '学生状态', ['在校', '休学', '离校']],
+    ['enrollmentDate', '入学日期', 'date'], ['currentStage', '学习阶段'],
   ];
-  const sensitiveFields = [['birthday', '生日', 'date'], ['phone', '联系电话', 'tel'], ['parentName', '家长姓名'], ['parentPhone', '家长电话', 'tel'], ['wechat', '微信'], ['address', '家庭地址']];
+  const sensitiveFields = [['birthday', '生日（年、年月或年月日）', 'text'], ['phone', '联系电话', 'tel'], ['parentName', '家长姓名'], ['parentPhone', '家长电话', 'tel'], ['wechat', '微信'], ['address', '家庭地址']];
   const permissionLabels = { 'students.read': '查看资料', 'students.sensitive': '敏感资料', 'students.write': '编辑资料', 'students.bind': '账号绑定' };
   const actionLabels = { 'students.create': '新建学生', 'students.update': '修改资料', 'students.sensitive.read': '查看敏感资料', 'students.sensitive.profile': '资料页查看敏感资料', 'permissions.save': '保存授权', 'permissions.revoke': '撤销授权', 'admin.grant': '设置插件管理员', 'admin.revoke': '移除插件管理员' };
   function element(tag, className, content) {
@@ -68,7 +69,7 @@
     for (const student of state.students) {
       const row = element('tr'); const nameCell = element('td');
       const person = element('div');
-      const identity = element('div'); identity.append(element('div', 'sms-student-name', student.name), element('div', 'sms-secondary', student.studentNo || '未填写学号'));
+      const identity = element('div'); identity.append(element('div', 'sms-student-name', student.name), element('div', 'sms-secondary', student.hydroUid ? `UID ${student.hydroUid}` : '未绑定账号'));
       person.append(identity); nameCell.append(person); row.append(nameCell);
       const school = element('td'); school.append(element('div', '', student.grade || '未填写年级'), element('div', 'sms-secondary', student.school || '未填写学校')); row.append(school);
       row.append(element('td', '', student.currentStage || '—'));
@@ -85,6 +86,45 @@
     $('sms-prev').disabled = state.page <= 1;
     $('sms-next').disabled = state.page * 20 >= state.total;
   }
+  function newRequestId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+    const value = [...bytes].map((n) => n.toString(16).padStart(2, '0')).join('');
+    return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+  }
+  let accountSearchRequest = 0;
+  function accountSearch(uidInput) {
+    const container = element('div', 'sms-account-search');
+    const label = element('label', 'sms-field', '快捷搜索已有账号');
+    const input = element('input', 'textbox'); input.type = 'search'; input.id = 'sms-account-query'; input.placeholder = '输入用户名或 UID'; input.maxLength = 60; label.append(input);
+    const results = element('div', 'sms-account-results'); results.id = 'sms-account-results'; results.setAttribute('aria-live', 'polite');
+    const search = async () => {
+      const request = ++accountSearchRequest;
+      if (!input.value.trim()) { results.replaceChildren(); return; }
+      results.replaceChildren(element('p', 'help-text', '正在查找账号…'));
+      try {
+        const url = new URL(app.dataset.users, location.origin);
+        url.search = new URLSearchParams({ q: input.value.trim(), ...(state.current ? { studentId: state.current.id } : {}) });
+        const users = await api(url);
+        if (request !== accountSearchRequest || !container.isConnected) return;
+        results.replaceChildren();
+        for (const user of users) {
+          const button = element('button', 'rounded button', `${user.username} · UID ${user.uid}${user.available ? '' : '（已绑定其他学生）'}`);
+          button.type = 'button'; button.disabled = !user.available;
+          button.addEventListener('click', () => {
+            uidInput.value = String(user.uid); input.value = user.username;
+            accountSearchRequest++; results.replaceChildren(element('p', 'help-text', `已选择 ${user.username}（UID ${user.uid}）`));
+          });
+          results.append(button);
+        }
+        if (!users.length) results.append(element('p', 'help-text', state.current ? '没有匹配的账号，请核对用户名或 UID。' : '没有匹配的账号，可清空 UID 自动创建新账号。'));
+      } catch (error) { if (request === accountSearchRequest) results.replaceChildren(element('p', '', error.message)); }
+    };
+    let timer;
+    input.addEventListener('input', () => { clearTimeout(timer); accountSearchRequest++; timer = setTimeout(search, 250); });
+    input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); clearTimeout(timer); search(); } });
+    container.append(label, results); return container;
+  }
   function fieldGroup(title, fields, values, editable, prefix) {
     const fragment = document.createDocumentFragment(); fragment.append(element('h2', 'section__title', title));
     const grid = element('div', 'sms-form-grid');
@@ -96,6 +136,7 @@
           input = element('select', 'select');
           for (const option of type) { const node = element('option', '', option); node.value = option; input.append(node); }
         } else { input = element('input', 'textbox'); input.type = type; input.maxLength = key === 'name' ? 80 : key === 'address' ? 500 : 160; }
+        if (key === 'birthday') { input.placeholder = '如 2012、2012-06 或 2012-06-15'; input.maxLength = 10; }
         input.name = `${prefix}.${key}`; input.value = values[key] || (key === 'status' ? '在校' : key === 'gender' ? '未填写' : ''); input.required = !!required; wrapper.append(input);
       } else wrapper.append(element('div', 'sms-read-value', values[key] || '未填写'));
       grid.append(wrapper);
@@ -107,6 +148,8 @@
     try {
       const student = id ? await api(`${app.dataset.api}/${encodeURIComponent(id)}`) : null;
       state.current = student;
+      state.createRequestId = student ? null : newRequestId();
+      accountSearchRequest++;
       const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
       $('sms-dialog-title').textContent = student ? student.basic.name : '新建学生';
       const fields = $('sms-student-fields'); fields.replaceChildren();
@@ -121,8 +164,9 @@
       }
       fields.append(element('h2', 'section__title', 'Hydro 账号关联'));
       if (caps.bind) {
-        const label = element('label', 'sms-field', 'Hydro UID'); const input = element('input', 'textbox'); input.type = 'number'; input.min = '1'; input.step = '1'; input.name = 'hydroUid'; input.placeholder = '留空表示不绑定账号'; input.value = student?.hydroUid || ''; label.append(input); fields.append(label);
-        fields.append(element('p', 'help-text', '绑定后，该 Hydro 用户可查看自己的基本与联系资料。请核实 UID 后再保存。'));
+        const label = element('label', 'sms-field', 'Hydro UID'); const input = element('input', 'textbox'); input.type = 'number'; input.min = '1'; input.step = '1'; input.name = 'hydroUid'; input.placeholder = student ? '留空表示解绑账号' : '留空自动创建姓名全拼账号'; input.value = student?.hydroUid || ''; label.append(input); fields.append(label);
+        fields.append(element('p', 'help-text', student ? '绑定后，该 Hydro 用户可查看自己的资料。清空 UID 只解绑，不会创建账号。' : '不填写 UID 时自动创建账号：用户名为姓名全拼，重名追加数字，初始密码与用户名一致。'));
+        fields.append(accountSearch(input));
       } else fields.append(element('p', 'sms-read-value', student?.hydroUid ? `UID ${student.hydroUid}` : '未绑定'));
       if (student) {
         const footnote = element('p', 'help-text', `最近更新：${dateTime(student.updatedAt)} · 档案编号 ${student.id}`); fields.append(footnote);
@@ -141,6 +185,7 @@
     const student = state.current; const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
     const values = new FormData(event.target); const body = {};
     if (student) body.version = student.version;
+    else body.requestId = state.createRequestId;
     if (caps.edit) {
       body.basic = Object.fromEntries(basicFields.map(([key]) => [key, values.get(`basic.${key}`) || '']));
       if (caps.editSensitive) body.sensitive = Object.fromEntries(sensitiveFields.map(([key]) => [key, values.get(`sensitive.${key}`) || '']));
@@ -149,8 +194,10 @@
     if (caps.bind) body.hydroUid = values.get('hydroUid') ? Number(values.get('hydroUid')) : null;
     $('sms-save-student').disabled = true;
     try {
-      await api(student ? `${app.dataset.api}/${encodeURIComponent(student.id)}` : app.dataset.api, body);
-      $('sms-student-dialog').close(); notice(student ? '学生资料已保存。' : '学生档案已创建。'); await loadStudents();
+      const result = await api(student ? `${app.dataset.api}/${encodeURIComponent(student.id)}` : app.dataset.api, body);
+      $('sms-student-dialog').close();
+      notice(result.generatedAccount ? `学生已创建。Hydro 用户名：${result.generatedAccount.username}，初始密码：${result.generatedAccount.username}，UID：${result.generatedAccount.uid}。` : student ? '学生资料已保存。' : '学生档案已创建，已关联现有账号。');
+      await loadStudents();
     } catch (error) { $('sms-dialog-error').textContent = error.message; $('sms-dialog-error').hidden = false; $('sms-dialog-error').scrollIntoView({ block: 'nearest' }); }
     finally { $('sms-save-student').disabled = false; }
   }
@@ -203,9 +250,9 @@
       if (state.selected.has(student.id)) state.selected.set(student.id, student.name);
       const label = element('label', 'checkbox'); const checkbox = element('input', 'checkbox'); checkbox.type = 'checkbox'; checkbox.dataset.studentId = student.id; checkbox.checked = state.selected.has(student.id);
       checkbox.addEventListener('change', () => { if (checkbox.checked) state.selected.set(student.id, student.name); else state.selected.delete(student.id); renderChips(); });
-      label.append(checkbox, document.createTextNode(`${student.name} · ${student.studentNo || '未填写学号'}`)); options.append(label);
+      label.append(checkbox, document.createTextNode(`${student.name} · ${student.hydroUid ? `UID ${student.hydroUid}` : '未绑定账号'}`)); options.append(label);
     }
-    if (result.total > 20) options.append(element('p', 'help-text', '显示前 20 条，请输入姓名或学号缩小范围。'));
+    if (result.total > 20) options.append(element('p', 'help-text', '显示前 20 条，请输入姓名缩小范围。'));
     if (!result.total) options.append(element('p', 'help-text', '没有匹配的学生。'));
     renderChips();
   }

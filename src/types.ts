@@ -1,4 +1,4 @@
-export const BASIC_FIELDS = ['studentNo', 'name', 'gender', 'grade', 'school', 'status', 'campus', 'enrollmentDate', 'competitionLevel', 'currentStage', 'targetLevel'] as const;
+export const BASIC_FIELDS = ['name', 'gender', 'grade', 'school', 'status', 'enrollmentDate', 'currentStage'] as const;
 export const SENSITIVE_FIELDS = ['birthday', 'phone', 'parentName', 'parentPhone', 'wechat', 'address'] as const;
 export const PERMISSIONS = ['students.read', 'students.sensitive', 'students.write', 'students.bind'] as const;
 export type Permission = typeof PERMISSIONS[number];
@@ -37,6 +37,9 @@ export interface StudentView {
   sensitive?: Student['sensitive'];
   internalNote?: string;
   capabilities: { edit: boolean; editSensitive: boolean; sensitive: boolean; bind: boolean; internalNote: boolean };
+}
+export function basicView(basic: Student['basic']): Student['basic'] {
+  return Object.fromEntries(BASIC_FIELDS.map((key) => [key, basic[key] || ''])) as Student['basic'];
 }
 export class SmsError extends Error {
   constructor(public status: number, message: string) { super(message); }

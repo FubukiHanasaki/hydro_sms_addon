@@ -1,4 +1,4 @@
-import { Policy, Permission, Student, StudentView } from './types';
+import { Policy, Permission, Student, StudentView, basicView } from './types';
 
 export function isAdmin(policy: Policy, uid: number): boolean {
   return Number.isSafeInteger(uid) && uid > 0 && policy.admins.includes(uid);
@@ -21,7 +21,7 @@ export function visibleStudent(policy: Policy, uid: number, student: Student): S
   // Internal notes are staff-only even when a student can read their own contacts.
   const internalNote = student.hydroUid !== uid && allows(policy, uid, 'students.sensitive', student._id);
   return {
-    id: student._id, basic: { ...student.basic }, hydroUid: student.hydroUid ?? null,
+    id: student._id, basic: basicView(student.basic), hydroUid: student.hydroUid ?? null,
     version: student.version, updatedAt: student.updatedAt,
     ...(sensitive ? { sensitive: { ...student.sensitive } } : {}),
     ...(internalNote ? { internalNote: student.internalNote } : {}),

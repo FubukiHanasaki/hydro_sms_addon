@@ -1,15 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Db, Filter } from 'mongodb';
 import { activeGrant, allows, canRead, isAdmin, readFilter, visibleStudent } from './access';
-import { Policy, SmsError, Student } from './types';
+import { Policy, SmsError, Student, basicView } from './types';
 import { object, positiveInt, text, validateBasic, validateGrant, validateSensitive } from './validation';
+import type { AccountGateway, CreatedAccount } from './accounts';
 
 export class StudentService {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private accounts?: AccountGateway) {}
   get students() { return this.db.collection<Student>('sms_students'); }
   get policies() { return this.db.collection<Policy>('sms_policy'); }
   async init() {
-    await this.students.createIndex({ 'basic.studentNo': 1 }, { unique: true, partialFilterExpression: { 'basic.studentNo': { $gt: '' } } });
     await this.students.createIndex({ hydroUid: 1 }, { unique: true, partialFilterExpression: { hydroUid: { $type: 'number' } } });
     await this.students.createIndex({ updatedAt: -1, _id: 1 });
     await this.db.collection('sms_audit').createIndex({ at: -1 });
@@ -39,7 +39,7 @@ export class StudentService {
       // A failed audit finalization must remain pending rather than falsely
       // reporting that an already committed mutation failed.
       if (!applied) await audit.updateOne({ _id: insertedId }, { $set: { outcome: 'failed', finishedAt: new Date() } });
-      if ((error as { code?: number }).code === 11000) throw new SmsError(409, '学号或 Hydro UID 已被其他档案使用');
+      if ((error as { code?: number }).code === 11000) throw new SmsError(409, 'Hydro UID 已被其他档案使用');
       throw error;
     }
   }
@@ -61,7 +61,7 @@ export class StudentService {
     const and: Record<string, unknown>[] = [readFilter(policy, uid)];
     if (q) {
       const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      and.push({ $or: [{ 'basic.name': { $regex: pattern, $options: 'i' } }, { 'basic.studentNo': { $regex: pattern, $options: 'i' } }] });
+      and.push({ 'basic.name': { $regex: pattern, $options: 'i' } });
     }
     if (status) and.push({ 'basic.status': status });
     const filter = { $and: and } as Filter<Student>;
@@ -70,7 +70,7 @@ export class StudentService {
       this.students.find(filter, { projection: { basic: 1, hydroUid: 1, version: 1, updatedAt: 1 } }).sort({ updatedAt: -1, _id: 1 }).skip((page - 1) * 20).limit(20).toArray(),
     ]);
     // Lists never contain contact details or internal notes, including for administrators.
-    return { total, page, pageSize: 20, students: rows.map((s) => ({ id: s._id, ...s.basic, hydroUid: s.hydroUid ?? null, version: s.version })) };
+    return { total, page, pageSize: 20, students: rows.map((s) => ({ id: s._id, ...basicView(s.basic), hydroUid: s.hydroUid ?? null, version: s.version })) };
   }
   async detail(uid: number, id: string) {
     const policy = await this.policy();
@@ -96,16 +96,60 @@ export class StudentService {
   async create(uid: number, value: unknown) {
     await this.requireAdmin(uid);
     const input = object(value);
-    this.checkFields(input, ['basic', 'sensitive', 'internalNote', 'hydroUid']);
+    this.checkFields(input, ['basic', 'sensitive', 'internalNote', 'hydroUid', 'requestId']);
     const now = new Date();
     const student: Student = {
       _id: randomUUID(), basic: validateBasic(input.basic), sensitive: validateSensitive(input.sensitive ?? {}),
       internalNote: text(input.internalNote ?? '', 3000, '内部备注'),
       version: 1, createdAt: now, updatedAt: now, createdBy: uid, updatedBy: uid,
     };
+    let generatedAccount: CreatedAccount | undefined;
     if (input.hydroUid !== undefined && input.hydroUid !== null) student.hydroUid = await this.assertUser(input.hydroUid);
-    await this.mutation(uid, 'students.create', student._id, Object.keys(input), () => this.students.insertOne(student));
-    return this.detail(uid, student._id);
+    else {
+      if (!this.accounts) throw new SmsError(503, '自动建号服务不可用');
+      const requestId = text(input.requestId, 36, '请求标识');
+      if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(requestId)) throw new SmsError(400, '新建学生需要有效的请求标识');
+      student._id = createHash('sha256').update(`${uid}:${requestId}`).digest('hex').slice(0, 32);
+      const fingerprint = createHash('sha256').update(JSON.stringify({ basic: student.basic, sensitive: student.sensitive, internalNote: student.internalNote })).digest('hex');
+      const jobs = this.db.collection<{ _id: string; actor: number; fingerprint: string; state: string; hydroUid?: number }>('sms_account_jobs');
+      try { await jobs.updateOne({ _id: student._id }, { $setOnInsert: { actor: uid, fingerprint, state: 'pending' } }, { upsert: true }); }
+      catch (error) { if ((error as { code?: number }).code !== 11000) throw error; }
+      const job = await jobs.findOne({ _id: student._id });
+      if (job?.fingerprint !== fingerprint) throw new SmsError(409, '此请求已经用于其他资料，请重新打开新建窗口');
+      const current = await this.students.findOne({ _id: student._id });
+      if (current) {
+        await jobs.updateOne({ _id: student._id }, { $set: { state: 'completed' } });
+        const user = await this.db.collection<{ _id: number; uname: string }>('user').findOne({ _id: current.hydroUid });
+        return { ...await this.detail(uid, current._id), generatedAccount: { uid: current.hydroUid, username: user?.uname } };
+      }
+      generatedAccount = await this.accounts.provision(student.basic.name, student._id);
+      student.hydroUid = generatedAccount.uid;
+      await jobs.updateOne({ _id: student._id }, { $set: { hydroUid: student.hydroUid, state: 'account_ready' } });
+    }
+    await this.mutation(uid, 'students.create', student._id, Object.keys(input).filter((key) => key !== 'requestId'), async () => {
+      try { await this.students.insertOne(student); }
+      catch (error) {
+        if (!generatedAccount || (error as { code?: number }).code !== 11000 || !await this.students.findOne({ _id: student._id, hydroUid: generatedAccount.uid })) throw error;
+      }
+    });
+    if (generatedAccount) await this.db.collection('sms_account_jobs').updateOne({ _id: student._id as never }, { $set: { state: 'completed' } });
+    return { ...await this.detail(uid, student._id), ...(generatedAccount ? { generatedAccount } : {}) };
+  }
+  async searchUsers(uid: number, query: unknown, studentId: unknown) {
+    const policy = await this.policy();
+    if (!isAdmin(policy, uid)) {
+      const id = text(studentId ?? '', 64, '学生 ID');
+      const student = await this.students.findOne({ _id: id });
+      if (!student || !canRead(policy, uid, student) || !allows(policy, uid, 'students.bind', id)) throw new SmsError(403, '没有账号绑定权限');
+    }
+    const q = text(query ?? '', 60, '账号搜索词');
+    if (!q) return [];
+    const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const users = await this.db.collection<{ _id: number; uname: string; unameLower: string }>('user').find({
+      _id: { $gt: 0 }, $or: [{ unameLower: { $regex: pattern, $options: 'i' } }, .../^\d+$/.test(q) ? [{ _id: Number(q) }] : []],
+    }, { projection: { _id: 1, uname: 1 } }).sort({ _id: 1 }).limit(10).toArray();
+    const bound = await this.students.find({ hydroUid: { $in: users.map((user) => user._id) } }, { projection: { _id: 1, hydroUid: 1 } }).toArray();
+    return users.map((user) => ({ uid: user._id, username: user.uname, available: !bound.some((s) => s.hydroUid === user._id && s._id !== studentId) }));
   }
   checkFields(input: Record<string, unknown>, fields: string[]) {
     if (Object.keys(input).some((key) => !fields.includes(key))) throw new SmsError(400, '请求包含未知字段');

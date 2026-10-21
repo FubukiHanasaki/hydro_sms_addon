@@ -1,7 +1,7 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=0.1.1">
-<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}">
+<link rel="stylesheet" href="/sms-addon/panel.css?v=0.2.0">
+<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
@@ -12,7 +12,7 @@
       <div class="section__body">
         <p id="sms-summary" class="help-text">正在加载可访问的学生资料</p>
         <form id="sms-search-form" class="sms-toolbar">
-          <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名或学号" maxlength="80" aria-label="搜索姓名或学号">
+          <input id="sms-search" class="textbox" type="search" placeholder="搜索姓名" maxlength="80" aria-label="搜索姓名">
           <select id="sms-status" class="select" aria-label="筛选学生状态"><option value="">全部状态</option><option>在校</option><option>休学</option><option>离校</option></select>
           <button class="rounded button" type="submit"><span class="icon icon-search"></span> 查询</button>
         </form>
@@ -31,7 +31,7 @@
             <div class="sms-form-grid"><label>Hydro UID<input class="textbox" type="number" id="sms-grant-uid" min="1" step="1" required placeholder="输入被授权用户的 UID"></label><label>授权失效时间（北京时间）<input class="textbox" type="datetime-local" id="sms-grant-expires"><span class="help-text">留空表示长期有效</span></label></div>
             <fieldset class="sms-checks"><legend>允许的操作</legend><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" checked disabled> 查看基本资料</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.sensitive" name="sms-permission"> 查看敏感资料与内部备注</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.write" name="sms-permission"> 编辑资料</label></div><div class="checkbox-container"><label class="checkbox"><input class="checkbox" type="checkbox" value="students.bind" name="sms-permission"> 绑定 / 解绑 Hydro 账号</label></div></fieldset>
             <label class="sms-field">学生范围<select class="select" id="sms-grant-scope"><option value="all">全部学生</option><option value="selected">指定学生</option></select></label>
-            <div id="sms-grant-students" hidden><label class="sms-field">查找学生<input class="textbox" id="sms-scope-search" type="search" placeholder="输入姓名或学号"></label><div id="sms-selected-students" class="sms-chips"></div><div id="sms-scope-options" class="sms-scope-options"></div></div>
+            <div id="sms-grant-students" hidden><label class="sms-field">查找学生<input class="textbox" id="sms-scope-search" type="search" placeholder="输入姓名"></label><div id="sms-selected-students" class="sms-chips"></div><div id="sms-scope-options" class="sms-scope-options"></div></div>
             <p class="help-text">敏感资料编辑需同时具备编辑与敏感资料权限。授权立即生效，撤销后下次请求立即失效。</p>
             <button class="primary rounded button" type="submit">保存授权</button>
           </form>
@@ -52,7 +52,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
     </ol></section>
     <section class="section side visible"><div class="section__header"><h2 class="section__title">当前身份</h2></div><div class="section__body typo"><p id="sms-identity">正在确认访问权限…</p><p class="help-text">学生本人可查看自己的资料。其他访问由插件管理员单独授权。</p></div></section>
-    <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.1.1</p></div></div>
+    <div class="section side visible"><div class="section__body"><p class="help-text sms-author">FubukiHanasaki · v0.2.0</p></div></div>
   </aside>
   <dialog id="sms-student-dialog" class="section visible sms-dialog" aria-labelledby="sms-dialog-title">
     <form id="sms-student-form">
@@ -62,5 +62,5 @@
     </form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?v=0.1.1" defer></script>
+<script src="/sms-addon/panel.js?v=0.2.0" defer></script>
 {% endblock %}

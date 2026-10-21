@@ -28,11 +28,22 @@ export function validateBasic(value: unknown) {
   validDate(result.enrollmentDate, '入学日期');
   return result;
 }
+export function birthday(value: string): string {
+  if (!value) return '';
+  const match = /^(\d{4})(?:[-/](\d{1,2})(?:[-/](\d{1,2}))?)?$/.exec(value);
+  if (!match || +match[1] < 1900 || +match[1] > new Date().getUTCFullYear()) throw new SmsError(400, '生日请填写有效年份、年月或年月日');
+  const year = match[1];
+  if (!match[2]) return year;
+  const month = match[2].padStart(2, '0');
+  if (+month < 1 || +month > 12) throw new SmsError(400, '生日月份无效');
+  if (!match[3]) return `${year}-${month}`;
+  return validDate(`${year}-${month}-${match[3].padStart(2, '0')}`, '生日');
+}
 export function validateSensitive(value: unknown) {
   const input = object(value);
   if (Object.keys(input).some((k) => !(SENSITIVE_FIELDS as readonly string[]).includes(k))) throw new SmsError(400, '敏感资料包含未知字段');
   const result = Object.fromEntries(SENSITIVE_FIELDS.map((k) => [k, text(input[k] ?? '', k === 'address' ? 500 : 160, k)])) as Record<typeof SENSITIVE_FIELDS[number], string>;
-  validDate(result.birthday, '生日');
+  result.birthday = birthday(result.birthday);
   return result;
 }
 export function validateGrant(value: unknown): Grant {

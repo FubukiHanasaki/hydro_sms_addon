@@ -209,3 +209,21 @@
 .sms-scope-options .checkbox {
   width: 100%;
 }
+.sms-account-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.sms-account-results .help-text {
+  margin: 0;
+}
+.sms-shell .sms-account-results .button {
+  margin: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+.sms-shell button:disabled {
+  opacity: .5;
+  cursor: default;
+}

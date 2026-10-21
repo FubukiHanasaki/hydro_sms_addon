@@ -30,5 +30,6 @@ export class Handler {
   checkPriv(privilege: number): void;
   url(name: string, args?: Record<string, unknown>): string;
 }
-export const PRIV: { PRIV_USER_PROFILE: number };
+export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number };
+export const UserModel: { create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number> };
 export class ForbiddenError extends Error {}
