@@ -12,7 +12,7 @@
 ## 入口
 
 - `/sms#courses` 或侧栏「课程管理」：选择班级，查看日期范围内的实际授课记录，独立登记、编辑课程及考勤。
-- `/sms#schedules` 或侧栏「排课管理」：选择班级，查看周课表、切换周次、新建或编辑排课计划；点击课表中的一次排课可登记实际课程、关联已有课程或调整计划。
+- `/sms#schedules` 或侧栏「排课管理」：按教师筛选跨班级周课表（默认全部教师），查看周课表、切换周次、新建时选择所属班级，编辑排课计划；点击课表中的一次排课可登记实际课程、关联已有课程或调整计划。
 - `/sms#organization` →「详情」：班级概览、实际课程、排课、考勤、模拟赛和 Rating 分析。标题、常用操作和标签栏固定，内容独立滚动；手机端采用单列概览与课程卡片。
 
 ## 排课
@@ -51,6 +51,7 @@
 
 全部接口复用 Hydro 会话及插件同源校验：
 
+- `GET /sms/api/teaching/schedules?teacherUid=&from=&to=`：授权范围内按教师汇总的跨班级课表、计划与教师筛选项。
 - `GET /sms/api/teaching/classes`：可访问班级和教学权限。
 - `GET /sms/api/classes/:id/teaching?from=YYYY-MM-DD&to=YYYY-MM-DD`：班级详情、计划、课次、实际课程、考勤和 Rating 分析。
 - `POST /sms/api/classes/:id/schedules`：保存独立排课计划，先 `preview: true` 再带 `previewToken` 确认；编辑须提供 `id`、`version`。

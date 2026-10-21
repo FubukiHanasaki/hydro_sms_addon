@@ -3,10 +3,33 @@ import { Db } from 'mongodb';
 import { OrganizationService } from './organization';
 import { StudentService } from './service';
 import { RatingService } from './rating';
+import { SmsError } from './types';
+import { text } from './validation';
 import { TeachingPlanner, ATTENDANCE, period as range } from './teaching-planner';
 export { ATTENDANCE } from './teaching-planner';
 export class TeachingService extends TeachingPlanner {
   constructor(private store: Db, private studentService: StudentService, private organization: OrganizationService, private rating: RatingService) { super(store, studentService, organization); }
+  async scheduleBoard(actor: number, teacherValue?: unknown, from?: unknown, to?: unknown) {
+    const selected = text(teacherValue ?? '', 20, '教师');
+    if (selected && !/^[1-9]\d*$/.test(selected)) throw new SmsError(400, '教师 UID 无效');
+    const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+    const last = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).toISOString().slice(0, 10);
+    const dates = range(from || `${today.slice(0, 7)}-01`, to || last);
+    const visible = await this.organization.domainList(actor), ids = visible.map(c => c._id);
+    const plans = await this.plans.find({ domainId: { $in: ids } }).toArray();
+    const metadata = await this.organization.classes.find({ domainId: { $in: ids } }).toArray();
+    const memberships = await this.store.collection('domain.user').find({ domainId: { $in: ids }, join: true }).project({ domainId: 1, uid: 1 }).toArray();
+    const classes = visible.map(c => ({ id: c._id, name: c.name || c._id, teacherUids: (metadata.find(m => m.domainId === c._id)?.teacherUids ?? []).filter(uid => memberships.some(m => m.domainId === c._id && m.uid === uid)) }));
+    const lessons = (await Promise.all(ids.map(id => this.instances(id, dates.from, dates.to)))).flat();
+    const uids = [...new Set([...classes.flatMap(c => c.teacherUids), ...plans.flatMap(p => p.revisions.map(r => r.teacherUid)), ...lessons.map(l => l.teacherUid)])];
+    const teachers = (await this.store.collection<{ _id: number; uname: string }>('user').find({ _id: { $in: uids } }).project({ uname: 1 }).sort({ uname: 1 }).toArray()).map(u => ({ uid: u._id, username: u.uname }));
+    if (selected && !teachers.some(t => t.uid === Number(selected))) throw new SmsError(403, '无权查看该教师的课表');
+    const me = await this.studentService.me(actor);
+    const className = (id: string) => classes.find(c => c.id === id)?.name || id;
+    return { period: dates, selected, teachers, classes, canPlan: me.admin,
+      lessons: lessons.filter(l => !selected || l.teacherUid === Number(selected)).map(l => ({ ...l, className: className(l.domainId) })).sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`)),
+      plans: plans.filter(p => !selected || p.revisions.at(-1)!.teacherUid === Number(selected)).map(p => ({ id: p._id, domainId: p.domainId, className: className(p.domainId), version: p.version, ...p.revisions.at(-1)! })) };
+  }
   async overview(actor: number, id: string, from?: unknown, to?: unknown) {
     const ctx = await this.context(actor, id), domainId = ctx.domain._id;
     const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10), month = today.slice(0, 7);

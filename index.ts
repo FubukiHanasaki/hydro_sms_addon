@@ -146,6 +146,10 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => organization.classDetail(this.user._id, this.context.params.id)); }
     async post() { await this.run(() => organization.classSave(this.user._id, this.context.params.id, this.body())); }
   }
+  class SmsScheduleBoardHandler extends SmsApiHandler {
+    async get() { await this.run(() => teaching.scheduleBoard(this.user._id, this.context.query.teacherUid, this.context.query.from, this.context.query.to)); }
+  }
+  ctx.Route('sms_api_schedule_board', '/sms/api/teaching/schedules', SmsScheduleBoardHandler);
   class SmsTeachingClassesHandler extends SmsApiHandler {
     async get() { await this.run(() => teaching.classes(this.user._id)); }
   }
