@@ -242,3 +242,15 @@
     grid-column: 1 / -1;
   }
 }
+.sms-org-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.sms-org-toolbar > .textbox { flex: 1 1 140px; min-width: 0; }
+.sms-org-toolbar > .select { width: auto; max-width: 100%; flex: 1 1 120px; }
+.sms-org-toolbar > .textbox, .sms-org-toolbar > .select, .sms-org-toolbar > .button { height: 36px; box-sizing: border-box; margin: 0; }
+.sms-org-card { padding: 16px 0; border-bottom: 1px solid rgba(128,128,128,.2); overflow-wrap: anywhere; }
+.sms-org-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sms-org-actions .button { margin: 0; }
+.sms-org-results { max-height: 240px; overflow: auto; margin-bottom: 12px; }
+.sms-org-results > .checkbox-container { display: block; padding: 4px 0; }
+.sms-shell .sms-org-results .checkbox { margin-bottom: 0 !important; }
+.sms-org-value { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 12px; }
+@media (max-width: 767px) { .sms-org-toolbar { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); } .sms-org-toolbar > .textbox { grid-column: 1 / -1; } }

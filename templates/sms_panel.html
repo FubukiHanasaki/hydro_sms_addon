@@ -1,7 +1,7 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=student-filters-aligned-20261021">
-<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=organization-final-20261021">
+<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
@@ -25,6 +25,16 @@
         <table class="data-table sms-table"><colgroup><col style="width:22%"><col style="width:22%"><col style="width:15%"><col style="width:10%"><col style="width:15%"><col style="width:16%"></colgroup><thead><tr><th>学生</th><th>年级 / 学校</th><th>学习阶段</th><th>状态</th><th>Hydro 账号</th><th>操作</th></tr></thead><tbody id="sms-student-rows"></tbody></table>
       </div><div id="sms-empty" class="sms-empty" hidden><p>暂无可查看的学生档案</p><p class="help-text">绑定学生账号或由插件管理员授权后，资料会显示在这里。</p></div></div>
       <div class="section__body sms-pagination"><span id="sms-page-label" class="help-text"></span><div><button type="button" id="sms-prev" class="rounded button">上一页</button><button type="button" id="sms-next" class="rounded button">下一页</button></div></div>
+    </section>
+    <section id="sms-domains-section" class="section visible" hidden>
+      <div class="section__header"><h1 class="section__title">子域管理</h1><div class="section__tools"><button type="button" id="sms-create-domain" class="primary rounded button" hidden>＋ 新建子域</button></div></div>
+      <div class="section__body"><p class="help-text">使用 Hydro 子域。班级分组与域成员关系分别管理，插件授权不继承域角色。</p><div id="sms-domain-list"></div></div>
+    </section>
+    <section id="sms-classes-section" class="section visible" hidden>
+      <div class="section__header"><h1 class="section__title">班级管理</h1><div class="section__tools"><button type="button" id="sms-create-class" class="primary rounded button" hidden>＋ 新建班级</button></div></div>
+      <div class="section__body"><form id="sms-class-search-form" class="sms-org-toolbar"><input id="sms-class-query" type="search" class="textbox" placeholder="搜索班级" aria-label="搜索班级"><select id="sms-class-domain" class="select" aria-label="筛选班级子域"><option value="">全部子域</option></select><select id="sms-class-status" class="select" aria-label="筛选班级状态"><option value="">全部状态</option><option value="active">开班中</option><option value="archived">已归档</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-class-summary" class="help-text"></p></div>
+      <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table"><thead><tr><th>班级</th><th>子域</th><th>班型 / 学年</th><th>人数</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-class-rows"></tbody></table></div></div>
+      <div class="section__body sms-pagination"><span id="sms-class-page" class="help-text"></span><div><button type="button" id="sms-class-prev" class="rounded button">上一页</button><button type="button" id="sms-class-next" class="rounded button">下一页</button></div></div>
     </section>
     <div id="sms-permissions-section" hidden>
       <section class="section visible">
@@ -52,6 +62,8 @@
   <aside class="medium-3 columns sms-sidebar" aria-label="学生管理导航">
     <section class="section side visible"><div class="section__header"><h1 class="section__title">学生管理</h1></div><ol class="menu">
       <li class="menu__item"><button type="button" class="menu__link sms-nav active" data-tab="students"><span class="icon icon-user"></span> 学生档案</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="domains">子域管理</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="classes">班级管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
     </ol></section>
@@ -65,6 +77,10 @@
       <footer class="section__footer sms-dialog-footer"><a id="sms-hydro-profile" hidden>查看 Hydro 资料页</a><div><button type="button" class="rounded button" id="sms-cancel-dialog">关闭</button><button type="submit" class="primary rounded button" id="sms-save-student">保存资料</button></div></footer>
     </form>
   </dialog>
+  <dialog id="sms-org-dialog" class="section visible sms-dialog" aria-labelledby="sms-org-title">
+    <form id="sms-org-form"><header class="section__header sms-dialog-header"><h1 id="sms-org-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-org-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-org-error" class="help-text" role="alert"></p><div id="sms-org-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-org-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-org-save">保存</button></div></footer></form>
+  </dialog>
 </div>
-<script src="/sms-addon/panel.js?build=student-filters-aligned-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=organization-final-20261021" defer></script>
+<script src="/sms-addon/organization.js?build=organization-final-20261021" defer></script>
 {% endblock %}

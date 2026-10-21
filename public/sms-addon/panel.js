@@ -18,7 +18,7 @@
   ];
   const sensitiveFields = [['birthday', '生日（年、年月或年月日）', 'text'], ['phone', '联系电话', 'tel'], ['parentName', '家长姓名'], ['parentPhone', '家长电话', 'tel'], ['wechat', '微信'], ['address', '家庭地址']];
   const permissionLabels = { 'students.read': '查看资料', 'students.sensitive': '敏感资料', 'students.write': '编辑资料', 'students.bind': '账号绑定' };
-  const actionLabels = { 'students.create': '新建学生', 'students.update': '修改资料', 'students.sensitive.read': '查看敏感资料', 'students.sensitive.profile': '资料页查看敏感资料', 'permissions.save': '保存授权', 'permissions.revoke': '撤销授权', 'admin.grant': '设置插件管理员', 'admin.revoke': '移除插件管理员' };
+  const actionLabels = { 'domains.create': '新建子域', 'domains.update': '修改子域', 'domains.join': '加入子域', 'domains.leave': '移出子域', 'classes.create': '新建班级', 'classes.update': '修改班级或成员', 'students.create': '新建学生', 'students.update': '修改资料', 'students.sensitive.read': '查看敏感资料', 'students.sensitive.profile': '资料页查看敏感资料', 'permissions.save': '保存授权', 'permissions.revoke': '撤销授权', 'admin.grant': '设置插件管理员', 'admin.revoke': '移除插件管理员' };
   function element(tag, className, content) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -299,9 +299,9 @@
   }
   async function switchTab(tab) {
     state.tab = tab; notice('');
-    for (const name of ['students', 'permissions', 'audit']) $(`sms-${name}-section`).hidden = name !== tab;
+    for (const name of ['students', 'permissions', 'audit', 'domains', 'classes']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
-    try { if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
+    try { if (tab === 'domains' || tab === 'classes') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') await loadPolicy(); else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
     catch (error) { notice(error.message, true); }
   }
   $('sms-search-form').addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; notice(''); loadStudents(); });
@@ -318,14 +318,17 @@
   let scopeTimer; $('sms-scope-search').addEventListener('input', () => { clearTimeout(scopeTimer); scopeTimer = setTimeout(() => loadScope().catch((error) => notice(error.message, true)), 250); });
   $('sms-refresh-audit').addEventListener('click', () => loadAudit().catch((error) => notice(error.message, true)));
   document.querySelectorAll('.sms-nav').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
+  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes'].includes(location.hash.slice(1))) switchTab(location.hash.slice(1)); });
   (async () => {
     try {
       state.me = await api(app.dataset.me);
       $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
       $('sms-create').hidden = $('sms-permissions-nav').hidden = $('sms-audit-nav').hidden = !state.me.admin;
       if (!state.me.initialized) notice('插件尚未初始化，请由服务器维护人员指定首位插件管理员。');
+      app.dispatchEvent(new CustomEvent('sms:ready', { detail: state.me }));
       await loadFilterOptions();
       await loadStudents();
+      if (['domains', 'classes'].includes(location.hash.slice(1))) await switchTab(location.hash.slice(1));
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();
 })();

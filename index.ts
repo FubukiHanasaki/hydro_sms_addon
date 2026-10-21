@@ -1,4 +1,6 @@
-import { Context, Handler, PRIV, ForbiddenError, UserModel } from 'hydrooj';
+import { disableNativeDomainManagement } from './src/native-domains';
+import { OrganizationService } from './src/organization';
+import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel } from 'hydrooj';
 import { HydroAccounts } from './src/accounts';
 import { StudentService } from './src/service';
 import { SmsError } from './src/types';
@@ -8,6 +10,13 @@ export const name = 'hydro-sms-addon';
 export async function apply(ctx: Context) {
   const service = new StudentService(ctx.db.db, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
   await service.init();
+  const organization = new OrganizationService(ctx.db.db, service, {
+    create: (id, owner, name, bulletin) => DomainModel.add(id, owner, name, bulletin),
+    edit: (id, data) => DomainModel.edit(id, data),
+    join: (id, uid, joined) => DomainModel.setJoin(id, uid, joined),
+  });
+  await organization.init();
+  disableNativeDomainManagement(ctx);
 
   function privateResponse(handler: Handler) {
     handler.response.addHeader('Cache-Control', 'private, no-store');
@@ -18,7 +27,7 @@ export async function apply(ctx: Context) {
       this.checkPriv(PRIV.PRIV_USER_PROFILE);
       privateResponse(this);
       this.response.template = 'sms_panel.html';
-      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters') };
+      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes') };
     }
   }
   class SmsApiHandler extends Handler {
@@ -72,6 +81,26 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.filterOptions(this.user._id)); }
   }
 
+  class SmsDomainsHandler extends SmsApiHandler {
+    async get() { await this.run(() => organization.domainList(this.user._id)); }
+    async post() { await this.run(() => organization.domainSave(this.user._id, this.body())); }
+  }
+  class SmsDomainMembersHandler extends SmsApiHandler {
+    async get() { await this.run(() => organization.domainMembers(this.user._id, this.context.params.id, this.context.query.q, this.context.query.page)); }
+    async post() { await this.run(() => organization.domainMembership(this.user._id, this.context.params.id, this.body())); }
+  }
+  class SmsClassesHandler extends SmsApiHandler {
+    async get() { await this.run(() => organization.classList(this.user._id, this.context.query.q, this.context.query.domainId, this.context.query.status, this.context.query.page)); }
+    async post() { await this.run(() => organization.classSave(this.user._id, null, this.body())); }
+  }
+  class SmsClassHandler extends SmsApiHandler {
+    async get() { await this.run(() => organization.classDetail(this.user._id, this.context.params.id)); }
+    async post() { await this.run(() => organization.classSave(this.user._id, this.context.params.id, this.body())); }
+  }
+  ctx.Route('sms_api_domains', '/sms/api/domains', SmsDomainsHandler);
+  ctx.Route('sms_api_domain_members', '/sms/api/domains/:id/members', SmsDomainMembersHandler);
+  ctx.Route('sms_api_classes', '/sms/api/classes', SmsClassesHandler);
+  ctx.Route('sms_api_class', '/sms/api/classes/:id', SmsClassHandler);
   ctx.Route('sms_panel', '/sms', SmsPanelHandler);
   ctx.Route('sms_api_me', '/sms/api/me', SmsMeHandler);
   ctx.Route('sms_api_students', '/sms/api/students', SmsStudentsHandler);

@@ -8,7 +8,8 @@ export interface Context {
   Route(name: string, path: string, handler: typeof Handler): void;
   injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number): void;
   i18n: { load(language: string, entries: Record<string, string>): void };
-  on(event: 'handler/after/UserDetail', callback: (handler: Handler) => Promise<void>): void;
+  on(event: string, callback: (handler: Handler) => Promise<void | string>): void;
+  effect(callback: () => (() => void)): void;
 }
 export class Handler {
   user: { _id: number; hasPriv(privilege: number): boolean };
@@ -25,6 +26,7 @@ export class Handler {
     status: number;
     type: string;
     template?: string;
+    redirect?: string;
     addHeader(name: string, value: string): void;
   };
   checkPriv(privilege: number): void;
@@ -33,3 +35,9 @@ export class Handler {
 export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number };
 export const UserModel: { create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number> };
 export class ForbiddenError extends Error {}
+
+export const DomainModel: {
+  add(id: string, owner: number, name: string, bulletin: string): Promise<unknown>;
+  edit(id: string, data: { name: string; bulletin: string }): Promise<unknown>;
+  setJoin(id: string, uid: number, join: boolean): Promise<unknown>;
+};
