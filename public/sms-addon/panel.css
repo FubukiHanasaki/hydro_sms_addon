@@ -305,3 +305,36 @@
   .sms-member-editable .sms-member-actions .button { padding-left: 10px; padding-right: 10px; }
   .sms-member-add-actions { align-items: flex-start; flex-wrap: wrap; }
 }
+/* Every management tab shares one grid; table/form content cannot resize it. */
+.sms-shell.row {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+}
+.sms-shell.row::before,
+.sms-shell.row::after {
+  display: none;
+}
+.sms-shell > .sms-main,
+.sms-shell > .sms-sidebar {
+  float: none;
+  width: 100%;
+  min-width: 0;
+}
+.sms-main > section,
+.sms-main > #sms-permissions-section,
+#sms-permissions-section > section {
+  min-width: 0;
+  max-width: none;
+}
+/* Keep the usable viewport width stable when a shorter tab needs no scrollbar. */
+html:has(#sms-app) {
+  scrollbar-gutter: stable;
+}
+@supports not (scrollbar-gutter: stable) {
+  html:has(#sms-app) { overflow-y: scroll; }
+}
+@media (max-width: 767px) {
+  .sms-shell.row { grid-template-columns: minmax(0, 1fr); }
+}
