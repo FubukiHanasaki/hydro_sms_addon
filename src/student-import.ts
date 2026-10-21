@@ -88,6 +88,7 @@ export class StudentImportService {
       let j=await this.jobs.findOne({_id:id});if(!j||(j.status==='preview'&&j.actor!==actor))throw new SmsError(403,'批次不存在或预览不属于当前管理员');if(j.status==='completed')return this.detail(actor,id);
       if(j.items.some(i=>i.selected&&i.rating)){await this.students.requireAction(actor,'rating.import');if(!this.rating)throw new SmsError(400,'Rating 服务不可用');}
       if(j.status==='preview'){
+        if(j.items.some(i=>i.selected&&!i.hydroUid&&(!i.username||i.username.length<6)))throw new SmsError(409,'预览用户名不满足 Hydro 登录要求，请重新预览');
         if(j.items.some(i=>i.selected&&i.rating)&&(await this.rating!.head()).revision!==j.ratingRevision)throw new SmsError(409,'Rating 已变化，请重新预览导入');
         await requireNoStudentBatch(this.db);if(Date.now()<j.createdAt.getTime()||Date.now()-j.createdAt.getTime()>15*60000)throw new SmsError(409,'预览已过期，请重新预览');
         if(!j.items.some(i=>i.selected))throw new SmsError(400,'没有选择可导入的记录');if((await this.snapshot()).digest!==j.snapshot)throw new SmsError(409,'学生档案已变化，请重新预览');

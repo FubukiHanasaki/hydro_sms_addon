@@ -46,6 +46,13 @@ export function validateSensitive(value: unknown) {
   result.birthday = birthday(result.birthday);
   return result;
 }
+export function zonedInstant(value: unknown, label = '授权时间'): string {
+  const s = text(value, 40, label);
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.exec(s);
+  if (!match || +match[2] > 23 || +match[3] > 59 || +(match[4] || 0) > 59 || !Number.isFinite(Date.parse(s))) throw new SmsError(400, `${label}必须是有效且带时区的日期时间`);
+  validDate(match[1], label);
+  return new Date(s).toISOString();
+}
 export function validateGrant(value: unknown): Grant {
   const input = object(value);
   const uid = positiveInt(input.uid);
@@ -60,8 +67,9 @@ export function validateGrant(value: unknown): Grant {
   }
   let expiresAt: string | null = null;
   if (input.expiresAt) {
-    if (typeof input.expiresAt !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/.test(input.expiresAt) || !Number.isFinite(Date.parse(input.expiresAt)) || Date.parse(input.expiresAt) <= Date.now()) throw new SmsError(400, '失效时间必须包含时区且晚于现在');
-    expiresAt = new Date(input.expiresAt).toISOString();
+    const instant = zonedInstant(input.expiresAt, '失效时间');
+    if (Date.parse(instant) <= Date.now()) throw new SmsError(400, '失效时间必须晚于当前时间');
+    expiresAt = instant;
   }
   return { uid, permissions, studentIds, expiresAt };
 }

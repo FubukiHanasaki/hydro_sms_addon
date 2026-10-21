@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Db } from 'mongodb';
 import { StudentService } from './service';
 import { SmsError } from './types';
+import { readFilter } from './access';
 import { object, positiveInt, text } from './validation';
 import { BANDS, DIFFICULTIES, TITLES, Difficulty, Participant, RatingState, changeBucket, ratingTitle, round } from './rating-core';
 export interface RatingSource {
@@ -252,7 +253,7 @@ export class RatingService {
         const recent = await this.changes.find({ ...filter, at: { $gte: new Date(Date.now() - 30 * 86400000).toISOString() } }).toArray();
         return { uid, username: user.uname, revision: h.revision, tierBands: TITLES.map(({ min, title, key }) => ({ min, title, key })), ...this.present(summary), recent: changeBucket(recent), total, page, pageSize: 20, history: rows.map(({ _id, generation, ...c }) => c), trend: trend.map(c => ({ at: c.at, rating: c.after, delta: c.delta, title: c.title, rank: c.rank, participants: c.participants })) };
     }
-    async board(domainId: string, query: unknown = '', pageValue: unknown = 1, mode: unknown = 'all', gradeValue: unknown = '', schoolValue: unknown = '') {
+    async board(domainId: string, query: unknown = '', pageValue: unknown = 1, mode: unknown = 'all', gradeValue: unknown = '', schoolValue: unknown = '', actor = 0) {
         const q = text(query ?? '', 80, '搜索词'), grade = text(gradeValue ?? '', 160, '年级'), school = text(schoolValue ?? '', 160, '学校'), page = positiveInt(Number(pageValue), '页码');
         if (page > 100000)
             throw new SmsError(400, '页码无效');
@@ -272,10 +273,12 @@ export class RatingService {
             list.push(c);
             grouped.set(c.uid, list);
         }
-        // Basic student fields are used only as predicates; never publish private names.
+        // Predicates can disclose school/grade through membership in a result set.
+        // Only apply them to profiles this viewer is allowed to read.
         let allowed: Set<number> | undefined;
         if (grade || school) {
-            const students = await this.students.students.find({ ...grade ? { 'basic.grade': grade } : {}, ...school ? { 'basic.school': school } : {} }, { projection: { hydroUid: 1 } }).toArray();
+            const policy = await this.students.studentPolicy(actor);
+            const students = await this.students.students.find({ $and: [readFilter(policy, actor), { ...grade ? { 'basic.grade': grade } : {}, ...school ? { 'basic.school': school } : {} }] }, { projection: { hydroUid: 1 } }).toArray();
             allowed = new Set(students.map(s => s.hydroUid!).filter(Boolean));
         }
         const summaryMap = new Map(summaries.map(s => [s.uid, s]));

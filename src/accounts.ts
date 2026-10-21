@@ -6,7 +6,9 @@ export function usernameBase(name: string) {
   const value = pinyin(name, { toneType: 'none', type: 'array', mode: 'surname', surname: 'head' }).join('')
     .toLowerCase().replace(/ü/g, 'v').replace(/[^a-z0-9]/g, '');
   if (!value) throw new SmsError(400, '姓名无法生成拼音账号，请选择已有 Hydro UID');
-  return value.length < 3 ? `${value}01` : value.slice(0, 27);
+  // Initial passwords equal usernames, so generated names must also satisfy
+  // Hydro's six-character password minimum.
+  return value.length < 6 ? `${value.padEnd(5, '0')}1` : value.slice(0, 27);
 }
 export interface CreatedAccount { uid: number; username: string }
 export interface AccountGateway { provision(name: string, requestKey: string, preferredUsername?: string): Promise<CreatedAccount> }
@@ -25,6 +27,7 @@ export class HydroAccounts implements AccountGateway {
     const existing = await recover();
     if (existing) return existing;
     const base = preferredUsername || usernameBase(name);
+    if (base.length < 6 || base.length > 31) throw new SmsError(409, '预览用户名不满足初始密码长度要求，请重新预览；未完成批次请由管理员核对');
     for (let suffix = 0; suffix < 10000; suffix++) {
       const username = suffix ? `${base}${suffix}` : base;
       if (await users.findOne({ unameLower: username }, { projection: { _id: 1 } })) { if (preferredUsername) throw new SmsError(409, '预览用户名已被占用'); continue; }

@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { Db } from 'mongodb';
 import { Policy, SmsError } from './types';
-import { object, positiveInt, text } from './validation';
+import { object, positiveInt, text, zonedInstant } from './validation';
 export const MODULES = {
  students: ['学生档案', {read:'查看基本资料',sensitive:'查看敏感资料',write:'修改资料',bind:'绑定账号',create:'创建学生',import:'批量导入',promote:'批量升年级',export:'导出基本资料'}],
  classes: ['班级与子域',{read:'查看',create:'创建',update:'修改资料',members:'管理成员',teachers:'分配教师',archive:'归档',export:'导出'}],
@@ -98,7 +98,7 @@ export class AuthorizationService {
    const permissions=b.permissions;if(!Array.isArray(permissions)||!permissions.length||permissions.length>CODES.length||new Set(permissions).size!==permissions.length||permissions.some(p=>!CODES.includes(p)))throw new SmsError(400,'请选择有效操作');
    const ids=b.classIds;if(ids!=='all'&&(!Array.isArray(ids)||!ids.length||ids.length>200||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length))throw new SmsError(400,'请选择有效班级范围');
    if(ids!=='all'){if(permissions.some(p=>GLOBAL_ONLY.has(p)))throw new SmsError(400,'所选操作只支持全局授权');if(await this.db.collection('domain').countDocuments({_id:{$in:ids}as never})!==ids.length)throw new SmsError(400,'班级不存在');}
-   const at=(v:unknown,required:boolean)=>{if(!v&&!required)return null;const s=text(v,40,'授权时间');if(!/T.*(Z|[+-]\d\d:\d\d)$/.test(s)||!Number.isFinite(Date.parse(s)))throw new SmsError(400,'授权时间必须带时区');return new Date(s).toISOString();};
+   const at=(v:unknown,required:boolean)=>!v&&!required?null:zonedInstant(v);
    const startsAt=b.startsAt?at(b.startsAt,true)!:new Date().toISOString(),expiresAt=at(b.expiresAt,false);if(expiresAt&&(Date.parse(expiresAt)<=Date.now()||expiresAt<=startsAt))throw new SmsError(400,'失效时间须晚于开始时间和当前时间');
    c.grants.push({id:randomUUID(),uid:target,permissions,classIds:ids as Grant['classIds'],startsAt,expiresAt,reason:text(b.reason??'',500,'授权备注'),createdBy:uid,createdAt:new Date().toISOString()});
   }else if(action==='revoke'){

@@ -96,7 +96,7 @@ export async function apply(ctx: Context) {
       const kind = this.context.params.kind;
       if (['rating', 'rating-history'].includes(kind)) this.checkPerm(PERM.PERM_VIEW_RANKING);
       try {
-        const file = await exports.download(this.user._id, kind, this.context.query, this.args.domainId || 'system');
+        const file = await exports.download(this.user._id, kind, this.context.query, this.domain._id);
         this.response.type = file.type;
         this.response.addHeader('Content-Disposition', `attachment; filename="export.${file.filename.split('.').at(-1)}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`);
         this.response.addHeader('X-Content-Type-Options', 'nosniff');
@@ -147,7 +147,7 @@ export async function apply(ctx: Context) {
   }
 
   class SmsRatingBoardHandler extends SmsApiHandler {
-    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.args.domainId, this.context.query.classId); return { ...await rating.board(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school), classScope: scope }; }); }
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.domain._id, this.context.query.classId); return { ...await rating.board(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school, this.user._id), classScope: scope }; }); }
   }
   class SmsRatingHistoryHandler extends SmsApiHandler {
     async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.history(this.context.params.uid, this.context.query.page ?? 1)); }

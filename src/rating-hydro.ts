@@ -55,7 +55,7 @@ export function installRating(ctx: Context, rating: RatingService, organization:
     ctx.on('handler/before/DomainRank', async (h) => {
         h.checkPerm(PERM.PERM_VIEW_RANKING);
         let scope;
-        try { scope = await organization.ratingScope(h.user?._id ?? 0, h.args.domainId || h.domain._id, h.context.query.classId); }
+        try { scope = await organization.ratingScope(h.user?._id ?? 0, h.domain._id, h.context.query.classId); }
         catch (error) { if (error instanceof SmsError) throw new ForbiddenError(); throw error; }
         const data = await rating.board(scope.domainId, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all');
         h.response.template = 'sms_ranking.html';
