@@ -4,7 +4,7 @@
  const profile=document.querySelector('[data-sms-profile-rating]');const api=app?.dataset.api||native?.dataset.historyApi?.replace(/\/rating\/users$/,'/students')||profile?.dataset.api?.replace(/\/rating\/users\/\d+$/,'/students');if(!api)return;
  const base=api.replace(/\/students$/,'/exports');let opened;
  function control(label,kind,query=()=>({}),options={}){
-  const wrap=document.createElement('span');wrap.className='sms-export-control';const toggle=document.createElement('button');toggle.type='button';toggle.className='rounded button sms-export-toggle';toggle.textContent=label;toggle.setAttribute('aria-expanded','false');const menu=document.createElement('span');menu.className='sms-export-menu';menu.hidden=true;if(typeof menu.showPopover==='function')menu.setAttribute('popover','manual');menu.setAttribute('aria-label',label+'格式');
+  const wrap=document.createElement('span');wrap.className='sms-export-control';const toggle=document.createElement('button');toggle.type='button';toggle.className='link sms-export-toggle';toggle.textContent=label;toggle.setAttribute('aria-expanded','false');const menu=document.createElement('span');menu.className='sms-export-menu';menu.hidden=true;if(typeof menu.showPopover==='function')menu.setAttribute('popover','manual');menu.setAttribute('aria-label',label+'格式');
   let sensitive;
   if(options.sensitive){const l=document.createElement('label');sensitive=document.createElement('input');sensitive.type='checkbox';l.append(sensitive,document.createTextNode('包含有权查看的联系资料'));menu.append(l);}
   const error=document.createElement('span');error.className='sms-export-error';error.setAttribute('role','alert');
@@ -31,6 +31,6 @@
  globalThis.SmsExport={control};
  for(const source of document.querySelectorAll('[data-sms-export]')){
   const kind=source.dataset.smsExport;let provider=()=>{if(['audit','permissions','module-permissions'].includes(kind))return {};const saved=app?.dataset[`export${({students:'Students',accounts:'Accounts',classes:'Classes',rating:'Rating'})[kind]}`];return saved?JSON.parse(saved):null;};
-  if(native)provider=()=>Object.fromEntries(new URLSearchParams(location.search));const wrapper=control(source.textContent,kind,provider,{sensitive:kind==='students'});if(source.hidden)wrapper.hidden=true;source.replaceWith(wrapper);
+  if(native)provider=()=>Object.fromEntries(new URLSearchParams(location.search));const wrapper=control(source.textContent,kind,provider,{sensitive:kind==='students'});if(source.hidden)wrapper.hidden=true;const tools=source.parentElement;if(tools.classList.contains('section__tools')&&tools.children.length===1){tools.classList.add('sms-export-only');tools.parentElement.classList.add('sms-header-export-only');}source.replaceWith(wrapper);
  }
 })();

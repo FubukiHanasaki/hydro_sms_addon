@@ -64,7 +64,7 @@
     let memberPage = 1; let version = c.version; let serial = 0; let busy = false;
     const body = root.closest('.sms-dialog-body'); const toolbar = el('div', 'sms-member-toolbar'); root.append(toolbar);
     const query = field(toolbar, 'member-search', '查找成员'); query.type = 'search'; query.placeholder = '用户名、姓名或 UID';
-    let exportQuery='';const refresh = button('刷新', () => load()); toolbar.append(refresh,globalThis.SmsExport.control('导出成员','members',()=>({classId:id,q:exportQuery})));
+    let exportQuery='';const refresh = button('刷新', () => load()); const actions=el('div','sms-member-toolbar-actions');actions.append(refresh,globalThis.SmsExport.control('导出成员','members',()=>({classId:id,q:exportQuery})));toolbar.append(actions);
     const summary = el('p', 'help-text'); summary.id = 'sms-member-summary'; root.append(summary);
     const list = el('div', 'sms-member-list'); list.id = 'sms-member-list'; root.append(list);
     const pager = $('sms-org-pagination'); pager.hidden = false;

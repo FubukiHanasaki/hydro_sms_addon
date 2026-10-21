@@ -347,3 +347,16 @@
 /* Keep native section titles and their actions in the same layout flow. */
 .sms-main>.section>.section__header,.sms-main>#sms-permissions-section>.section>.section__header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.sms-main>.section>.section__header>.section__title,.sms-main>#sms-permissions-section>.section>.section__header>.section__title{margin:0;flex:1 1 auto}.sms-shell .section__header>.section__tools{position:static;float:none;transform:none;max-width:100%;margin:0}.sms-shell .section__tools>.button,.sms-shell .section__tools>.sms-rating-admin>.button{display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;height:36px;line-height:1;padding:0 16px;margin:0}.sms-shell .sms-rating-admin{align-items:center;flex-wrap:wrap}
 @media(max-width:767px){.sms-main>#sms-permissions-section>.section>.section__header>.section__title{flex-basis:100%}.sms-shell .section__header>.section__tools{width:100%;justify-content:flex-start}.sms-main>#sms-permissions-section>.section>.section__header>.section__tools{width:100%}}
+
+/* Exports are secondary text actions, alongside the controls they belong to. */
+.sms-export-control>.sms-export-toggle,.sms-card-tools .sms-export-control>.sms-export-toggle{height:32px;padding:0 6px;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--teach-muted,#7c899a);font-size:12px;font-weight:400;cursor:pointer;margin:0}
+.sms-export-control>.sms-export-toggle:hover{color:var(--teach-blue,#3498db);background:transparent}
+.sms-export-control>.sms-export-toggle:focus-visible{outline:2px solid var(--teach-blue,#3498db);outline-offset:2px}
+.sms-dialog-export-actions,.sms-dialog-main-actions,.sms-dialog-footer-context,.sms-member-toolbar-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.sms-dialog-main-actions{margin-left:auto}.sms-dialog-footer-context>.sms-dialog-main-actions{margin-left:0}
+.sms-dialog-footer .button{margin:0}.sms-dialog-footer:has(.sms-dialog-export-actions){gap:12px;flex-wrap:wrap}
+.sms-member-toolbar-actions{margin-bottom:16px;flex-shrink:0}.sms-member-toolbar-actions>.button{margin:0}
+.sms-shell .sms-main .section__header.sms-header-export-only>.section__title{flex-basis:auto;min-width:0}
+.sms-shell .sms-main .section__header.sms-header-export-only>.sms-export-only{width:auto;flex-shrink:0}
+@media(max-width:767px){.sms-member-toolbar{gap:8px}.sms-member-toolbar-actions{gap:4px}.sms-member-toolbar-actions>.button{padding-left:12px;padding-right:12px}}
+.sms-dialog-footer>.sms-dialog-export-actions,.sms-dialog-footer>.sms-dialog-footer-context,.sms-import-dialog .sms-dialog-footer>.sms-org-actions{margin:0;align-items:center}
