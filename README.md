@@ -53,6 +53,10 @@ hydrooj addon add /absolute/path/to/hydro_sms_addon
 
 使用独立 Hydro profile 时，请在该 profile 中注册插件，并按部署方式重启 Hydro 网站进程。
 
+## 旧 Python SMS 迁移预览
+
+提供只读匹配工具，读取旧 SMS 的 SQLite 备份，生成与 Hydro 账号的逐人匹配候选、基本资料校验及 Rating 时间冲突报告。不会创建账号、档案或写入历史；确认后才进入导入阶段。操作与执行约束见 [旧 SMS 迁移预览](docs/legacy-sms-migration.md)。
+
 ## 初始化管理员
 
 **没有默认管理员，也不会继承 Hydro 超级管理员或域管理员权限。** 未指定插件管理员时，不允许创建档案或授权。首次部署后应由服务器维护人员明确指定插件管理员。
