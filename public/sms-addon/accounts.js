@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 (() => {
   const app = document.getElementById('sms-app'); if (!app) return;
-  const $ = id => document.getElementById(id); let me; let page = 1; let request = 0; let save;
+  const $ = id => document.getElementById(id); let me; let page = 1; let request = 0; let save; const selected = new Map(); let currentRows = [];
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = String(text); return node; };
   function error(e) { const node = $('sms-account-dialog').open ? $('sms-account-error') : $('sms-notice'); node.textContent = e.message; node.hidden = false; }
   function button(text, work) { const node = el('button', 'link sms-link', text); node.type = 'button'; node.addEventListener('click', () => Promise.resolve().then(work).catch(error)); return node; }
@@ -12,18 +12,25 @@
   }
   async function load() {
     const serial = ++request; const url = new URL(app.dataset.accounts, location.origin); url.search = new URLSearchParams({ q: $('sms-account-query').value, enabled: $('sms-account-enabled').value, page }); const data = await api(url); if (serial !== request) return;
+    currentRows = data.accounts; for (const a of data.accounts) if (selected.has(a.uid)) { if (a.protected) selected.delete(a.uid); else selected.set(a.uid, a); }
     const rows = $('sms-account-rows'); rows.replaceChildren();
     for (const account of data.accounts) {
-      const row = el('tr'); const name = el('td'); name.append(el('div', 'sms-student-name', account.username), el('div', 'sms-secondary', `UID ${account.uid}`)); row.append(name, el('td', '', account.studentName || '未绑定学生档案'), el('td', account.enabled ? 'text-green' : 'text-gray', account.enabled ? '已启用' : '已停用'));
+      const row = el('tr'); const cell = el('td'); const check = el('input'); check.type = 'checkbox'; check.disabled = account.protected; check.checked = selected.has(account.uid); check.setAttribute('aria-label', `选择 ${account.username}`); check.dataset.uid = account.uid; check.addEventListener('change', () => { if (check.checked) selected.set(account.uid, account); else selected.delete(account.uid); selection(); }); cell.append(check); row.append(cell); const name = el('td'); name.append(el('div', 'sms-student-name', account.username), el('div', 'sms-secondary', `UID ${account.uid}`)); row.append(name, el('td', '', account.studentName || '未绑定学生档案'), el('td', account.enabled ? 'text-green' : 'text-gray', account.enabled ? '已启用' : '已停用'));
       const actions = el('td'); const group = el('div', 'sms-org-actions');
       if (account.protected) group.append(el('span', 'help-text', '受保护账号'));
       else group.append(button('修改用户名', () => open('rename', account)), button('重置密码', () => open('password', account)), button(account.enabled ? '停用' : '启用', () => open('status', account)));
       const profile = el('a', 'link sms-link', '资料页 ↗'); profile.href = `/user/${account.uid}`; group.append(profile); actions.append(group); row.append(actions); rows.append(row);
     }
-    if (!data.accounts.length) { const row = el('tr'); const cell = el('td', 'help-text', '没有符合条件的账号'); cell.colSpan = 4; row.append(cell); rows.append(row); }
+    if (!data.accounts.length) { const row = el('tr'); const cell = el('td', 'help-text', '没有符合条件的账号'); cell.colSpan = 5; row.append(cell); rows.append(row); }
+    selection();
     $('sms-account-summary').textContent = `共 ${data.total} 个账号`;
     $('sms-account-page').textContent = `第 ${page} / ${Math.max(1, Math.ceil(data.total / 20))} 页`; $('sms-account-prev').disabled = page <= 1; $('sms-account-next').disabled = page * 20 >= data.total;
   }
+  function selection() { const available = currentRows.filter(a => !a.protected); const count = available.filter(a => selected.has(a.uid)).length; $('sms-account-select-page').checked = !!available.length && count === available.length; $('sms-account-select-page').indeterminate = count > 0 && count < available.length; $('sms-account-select-page').disabled = !available.length; $('sms-account-bulk-password').textContent = `批量重置密码（${selected.size}）`; $('sms-account-bulk-password').disabled = !selected.size; $('sms-account-clear-selection').hidden = !selected.size; }
+  $('sms-account-select-page').addEventListener('change', e => { for (const a of currentRows.filter(a => !a.protected)) { if (e.target.checked) selected.set(a.uid, a); else selected.delete(a.uid); } for (const c of $('sms-account-rows').querySelectorAll('input[data-uid]')) c.checked = selected.has(Number(c.dataset.uid)); selection(); });
+  $('sms-account-clear-selection').addEventListener('click', () => { selected.clear(); load().catch(error); });
+  $('sms-account-bulk-password').addEventListener('click', () => app.dispatchEvent(new CustomEvent('sms:bulk-password', { detail: [...selected.keys()] })));
+  app.addEventListener('sms:bulk-complete', () => { selected.clear(); if (location.hash === '#accounts') load().catch(error); });
   function field(root, id, label, type = 'text', value = '') {
     const wrap = el('label', 'sms-field', label); const input = el('input', 'textbox'); input.id = id; input.type = type; input.value = value; input.required = true; input.maxLength = type === 'password' ? 255 : 100; input.autocomplete = type === 'password' ? 'new-password' : 'off'; wrap.append(input); root.append(wrap); return input;
   }

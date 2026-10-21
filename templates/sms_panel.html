@@ -1,13 +1,13 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?build=nav-width-stable-20261021">
+<link rel="stylesheet" href="/sms-addon/panel.css?build=bulk-20261021">
 <div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
       <div class="section__header">
         <h1 class="section__title">学生档案</h1>
-        <div class="section__tools"><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
+        <div class="section__tools"><button type="button" class="rounded button sms-bulk-admin" data-bulk="promotion" hidden>批量升年级</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-create" class="primary rounded button" hidden><span class="icon icon-add"></span> 新建学生</button></div>
       </div>
       <div class="section__body">
         <p id="sms-summary" class="help-text">加载中…</p>
@@ -36,9 +36,9 @@
       <div class="section__body sms-pagination"><span id="sms-class-page" class="help-text"></span><div><button type="button" id="sms-class-prev" class="rounded button">上一页</button><button type="button" id="sms-class-next" class="rounded button">下一页</button></div></div>
     </section>
     <section id="sms-accounts-section" class="section visible" hidden>
-      <div class="section__header"><h1 class="section__title">账户管理</h1><div class="section__tools"><button type="button" id="sms-account-create" class="primary rounded button">＋ 创建账号</button></div></div>
-      <div class="section__body"><form id="sms-account-search-form" class="sms-org-toolbar"><input id="sms-account-query" type="search" class="textbox" placeholder="用户名、学生姓名或 UID" aria-label="搜索账号"><select id="sms-account-enabled" class="select" aria-label="账号启用状态"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-account-summary" class="help-text"></p></div>
-      <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table"><thead><tr><th>账号</th><th>关联学生</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-account-rows"></tbody></table></div></div>
+      <div class="section__header"><h1 class="section__title">账户管理</h1><div class="section__tools"><button type="button" class="rounded button sms-bulk-admin" data-bulk="provision" hidden>批量补建账号</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-account-create" class="primary rounded button">＋ 创建账号</button></div></div>
+      <div class="section__body"><form id="sms-account-search-form" class="sms-org-toolbar"><input id="sms-account-query" type="search" class="textbox" placeholder="用户名、学生姓名或 UID" aria-label="搜索账号"><select id="sms-account-enabled" class="select" aria-label="账号启用状态"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button type="submit" class="rounded button">查询</button></form><div class="sms-bulk-selection"><p id="sms-account-summary" class="help-text"></p><button type="button" id="sms-account-bulk-password" class="rounded button" disabled>批量重置密码（0）</button><button type="button" class="link" id="sms-account-clear-selection" hidden>清空选择</button></div></div>
+      <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table"><thead><tr><th><input type="checkbox" id="sms-account-select-page" aria-label="选择本页可操作账号"></th><th>账号</th><th>关联学生</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-account-rows"></tbody></table></div></div>
       <div class="section__body sms-pagination"><span id="sms-account-page" class="help-text"></span><div><button type="button" id="sms-account-prev" class="rounded button">上一页</button><button type="button" id="sms-account-next" class="rounded button">下一页</button></div></div>
     </section>
     <section id="sms-rating-section" class="section visible" hidden>
@@ -96,13 +96,14 @@
     <form id="sms-account-form"><header class="section__header sms-dialog-header"><h1 id="sms-account-title" class="section__title"></h1><button type="button" class="link sms-close" id="sms-account-close" aria-label="关闭"><span class="icon icon-close"></span></button></header><div class="section__body sms-dialog-body"><p id="sms-account-error" class="help-text" role="alert"></p><div id="sms-account-fields"></div></div><footer class="section__footer sms-dialog-footer"><span></span><div><button type="button" class="rounded button" id="sms-account-cancel">关闭</button><button type="submit" class="primary rounded button" id="sms-account-save">确认保存</button></div></footer></form>
   </dialog>
 </div>
-<script src="/sms-addon/panel.js?build=timeline-teachers-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=bulk-timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/organization.js?build=timeline-teachers-20261021" defer></script>
-<script src="/sms-addon/accounts.js?build=profile-overview-20261021" defer></script>
+<script src="/sms-addon/accounts.js?build=bulk-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
 <script src="/sms-addon/rating.js?build=ranking-badges-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/teaching.css?build=timeline-teachers-20261021">
 <script src="/sms-addon/schedule-layout.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/teaching.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/teachers.js?build=timeline-teachers-20261021" defer></script>
+<script src="/sms-addon/bulk.js?build=bulk-20261021" defer></script>
 {% endblock %}

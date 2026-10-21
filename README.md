@@ -24,6 +24,8 @@ Rating 已接入旧系统计算规则，并提供按 Hydro UID、分数、记录
 
 课程管理（`/sms#courses`）与排课管理（`/sms#schedules`）为独立入口：课程保存实际授课与考勤，排课保存每周计划。班级概览和 Rating 分析位于「班级与子域 → 详情」，详见 [课程、排课与班级详情](docs/teaching.md)。
 
+批量升年级位于「学生档案」右上角，支持复学选择、预览、重复执行提醒和批次撤销；「账户管理」支持为未绑定学生批量补建账号、勾选账号批量重置密码。两个页面均可查看「批量记录」，详见 [批量操作](docs/bulk.md)。
+
 ## 安装
 
 要求 Node.js 22+、Hydro 5.0.7+、MongoDB 7+ 和 `@hydrooj/ui-default`。已在 Hydro 5.0.7 / UI 4.58.5 / MongoDB 8.0.16 下验证。当前使用默认 UI 的模板扩展点，尚未适配 `ui-next`。
@@ -124,6 +126,7 @@ node scripts/admin.cjs revoke 123 /absolute/path/to/hydro/config.json
 - `sms_students`：字符串主键、基本/敏感资料、内部备注、可选 Hydro UID、版本号与创建/更新操作者。
 - `sms_account_jobs`：自动建号请求标识、操作者、资料摘要和处理状态；不保存密码或完整学生资料。
 - `sms_teaching_plans` / `sms_teaching_adjustments` / `sms_teaching_records`：每周排课与生效版本、临时调整、独立实际课程及考勤，详见 [教学管理](docs/teaching.md)。
+- `sms_bulk_jobs` / `sms_batch_locks`：批量操作预览、逐项执行结果及恢复锁，详见 [批量操作](docs/bulk.md)。
 - `sms_teachers`：教师账号关联、基本资料、联系方式、内部备注及版本。
 - `sms_classes`：唯一子域关联、班级扩展资料、教师 UID、显式成员身份、共享版本、同步状态与更新记录。
 - `sms_account_state` / `sms_account_locks`：账户管理版本与短期操作锁，不保存密码。
@@ -169,6 +172,6 @@ scripts/admin.cjs       服务器管理员初始化工具
 2. 扩展学生基本资料批量迁移；Rating 时间序列导入与重复检查已提供。
 3. 在现有班级与教师分配基础上，按实际需求增加班级范围的档案授权。
 4. 课次、排课、考勤及班级分析已提供基础闭环，继续按需要扩展教学报表与批量管理。
-5. 扩展 Hydro 作业与提交统计；比赛 Rating 结算已接入。
+5. 扩展 Hydro 作业与提交统计；比赛 Rating 结算已接入。模拟赛统一绑定 Hydro 原生比赛，不复建旧考试成绩维护流程；舍弃旧办公工作台。
 
 Copyright (C) 2026 FubukiHanasaki.

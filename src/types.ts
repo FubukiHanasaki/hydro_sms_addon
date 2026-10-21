@@ -11,6 +11,8 @@ export interface Student {
   internalNote: string;
   hydroUid?: number;
   version: number;
+  gradeRevision?: number;
+  gradeBatch?: string;
   createdAt: Date;
   updatedAt: Date;
   createdBy: number;

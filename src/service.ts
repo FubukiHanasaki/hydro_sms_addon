@@ -1,3 +1,4 @@
+import { studentLock, requireNoStudentBatch } from './student-lock';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Db } from 'mongodb';
 import { activeGrant, allows, canRead, isAdmin, readFilter, visibleStudent } from './access';
@@ -148,6 +149,9 @@ export class StudentService {
     return value;
   }
   async create(uid: number, value: unknown) {
+    return studentLock(this.db, async () => { await requireNoStudentBatch(this.db); return this.createUnlocked(uid, value); });
+  }
+  private async createUnlocked(uid: number, value: unknown) {
     await this.requireAdmin(uid);
     const input = object(value);
     this.checkFields(input, ['basic', 'sensitive', 'internalNote', 'hydroUid', 'requestId']);
@@ -209,6 +213,9 @@ export class StudentService {
     if (Object.keys(input).some((key) => !fields.includes(key))) throw new SmsError(400, '请求包含未知字段');
   }
   async update(uid: number, id: string, value: unknown) {
+    return studentLock(this.db, async () => { await requireNoStudentBatch(this.db); return this.updateUnlocked(uid, id, value); });
+  }
+  private async updateUnlocked(uid: number, id: string, value: unknown) {
     const input = object(value);
     this.checkFields(input, ['version', 'basic', 'sensitive', 'internalNote', 'hydroUid']);
     const version = positiveInt(input.version, '资料版本');
@@ -237,7 +244,7 @@ export class StudentService {
     }
     if (Object.keys(input).length === 1) throw new SmsError(400, '没有待保存的修改');
     await this.mutation(uid, 'students.update', id, Object.keys(input).filter((k) => k !== 'version'), async () => {
-      const result = await this.students.updateOne({ _id: id, version }, { $set, $inc: { version: 1 }, ...Object.keys($unset).length ? { $unset } : {} });
+      const result = await this.students.updateOne({ _id: id, version }, { $set, $inc: { version: 1, ...($set.basic && ($set.basic.grade !== student.basic.grade || $set.basic.status !== student.basic.status) ? { gradeRevision: 1 } : {}) }, ...Object.keys($unset).length ? { $unset } : {} });
       if (!result.matchedCount) throw new SmsError(409, '资料已被其他人修改，请重新打开后编辑');
     });
     return this.detail(uid, id);

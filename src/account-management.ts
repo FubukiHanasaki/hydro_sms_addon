@@ -5,7 +5,7 @@ import { SmsError } from './types';
 import { object, positiveInt, text } from './validation';
 
 interface UserDoc { _id: number; uname: string; unameLower: string; mailLower?: string; priv: number }
-interface AccountState { _id: number; version: number }
+interface AccountState { _id: number; version: number; pendingOperation?: string; completedOperation?: string }
 export interface UserGateway {
   create(mail: string, username: string, password: string): Promise<number>;
   rename(uid: number, username: string): Promise<unknown>;
@@ -54,7 +54,7 @@ export class AccountManagement {
       catch (e) { const account = await recover(); if (account) return account; if ((e as { code?: number }).code === 11000 || (e as Error).name === 'UserAlreadyExistError') throw new SmsError(409, '用户名已被使用'); throw e; }
     });
   }
-  async update(uid: number, targetValue: unknown, value: unknown) {
+  async update(uid: number, targetValue: unknown, value: unknown, operationKey?: string) {
     await this.students.requireAdmin(uid); const target = positiveInt(Number(targetValue)); const input = object(value);
     this.fields(input, ['action', 'username', 'password', 'enabled', 'version']);
     if (!['rename', 'password', 'status'].includes(String(input.action))) throw new SmsError(400, '账号操作无效');
@@ -70,17 +70,21 @@ export class AccountManagement {
       if (!user) throw new SmsError(404, '账号不存在');
       if (this.protected(user, policy.admins)) throw new SmsError(403, '内置、插件管理员或带额外 Hydro 权限的账号为受保护账号');
       const state = await this.states.findOne({ _id: target });
-      if ((state?.version ?? 0) !== input.version) throw new SmsError(409, '账号已被修改，请刷新后重试');
+      if (operationKey && state?.completedOperation === operationKey) return { uid: target, version: state.version };
+      if (state?.pendingOperation && state.pendingOperation !== operationKey) throw new SmsError(409, '该账号有未完成的批量重置，请先继续原批次');
+      const resuming = !!operationKey && state?.pendingOperation === operationKey;
+      if (!resuming && (state?.version ?? 0) !== input.version) throw new SmsError(409, '账号已被修改，请刷新后重试');
       return await this.students.mutation(uid, `accounts.${input.action}`, String(target), [String(input.action === 'status' ? 'enabled' : input.action === 'password' ? 'password' : 'username')], async () => {
         // Reserve the revision before host writes so failed requests cannot be
         // replayed on a stale account snapshot. No passwords enter plugin data.
-        await this.states.updateOne({ _id: target }, { $inc: { version: 1 } }, { upsert: true });
+        if (!resuming) await this.states.updateOne({ _id: target }, { $inc: { version: 1 }, ...(operationKey ? { $set: { pendingOperation: operationKey } } : {}) }, { upsert: true });
         try {
           if (username !== undefined) await this.host.rename(target, username);
           else if (password !== undefined) { await this.host.password(target, password); await this.host.revoke(target); }
           else { await this.host.privileges(target, input.enabled ? user.priv | this.host.profilePrivilege : user.priv & ~this.host.profilePrivilege); if (!input.enabled) await this.host.revoke(target); }
         } catch (e) { if ((e as { code?: number }).code === 11000 || (e as Error).name === 'UserAlreadyExistError') throw new SmsError(409, '用户名已被使用'); throw e; }
-        return { uid: target, version: (state?.version ?? 0) + 1 };
+        if (operationKey) await this.states.updateOne({ _id: target, pendingOperation: operationKey }, { $set: { completedOperation: operationKey }, $unset: { pendingOperation: '' } });
+        return { uid: target, version: (state?.version ?? 0) + (resuming ? 0 : 1) };
       });
     } finally { await locks.deleteOne({ _id: target, token }); }
   }

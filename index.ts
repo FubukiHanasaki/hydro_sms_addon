@@ -1,3 +1,4 @@
+import { BulkService } from './src/bulk';
 import { TeacherService } from './src/teachers';
 import { TeachingService } from './src/teaching';
 import { RatingService } from './src/rating';
@@ -31,6 +32,8 @@ export async function apply(ctx: Context) {
     profilePrivilege: PRIV.PRIV_USER_PROFILE, defaultPrivileges: PRIV.PRIV_DEFAULT,
   });
   await accounts.init();
+  const bulk = new BulkService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
+  await bulk.init();
   ctx.on('handler/before-prepare', async handler => { if (handler.user?._id > 0) await organization.ensureMainMembers(handler.user._id); });
   disableNativeDomainManagement(ctx);
   const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
@@ -131,6 +134,20 @@ export async function apply(ctx: Context) {
   class SmsAccountHandler extends SmsApiHandler {
     async post() { await this.run(() => accounts.update(this.user._id, this.context.params.uid, this.body())); }
   }
+  class SmsBulkHandler extends SmsApiHandler {
+    async get() { await this.run(() => bulk.history(this.user._id)); }
+    async post() { await this.run(() => bulk.preview(this.user._id, this.body())); }
+  }
+  class SmsBulkJobHandler extends SmsApiHandler {
+    async get() { await this.run(() => bulk.detail(this.user._id, this.context.params.id)); }
+    async post() { await this.run(() => bulk.execute(this.user._id, this.context.params.id, this.body())); }
+  }
+  class SmsBulkUndoHandler extends SmsApiHandler {
+    async post() { await this.run(() => bulk.undo(this.user._id, this.context.params.id)); }
+  }
+  ctx.Route('sms_api_bulk', '/sms/api/bulk', SmsBulkHandler);
+  ctx.Route('sms_api_bulk_job', '/sms/api/bulk/:id', SmsBulkJobHandler);
+  ctx.Route('sms_api_bulk_undo', '/sms/api/bulk/:id/undo', SmsBulkUndoHandler);
   ctx.Route('sms_api_accounts', '/sms/api/accounts', SmsAccountsHandler);
   ctx.Route('sms_api_account', '/sms/api/accounts/:uid', SmsAccountHandler);
   class SmsDomainsHandler extends SmsApiHandler {
