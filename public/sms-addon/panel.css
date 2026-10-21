@@ -328,13 +328,6 @@
   min-width: 0;
   max-width: none;
 }
-/* Keep the usable viewport width stable when a shorter tab needs no scrollbar. */
-html:has(#sms-app) {
-  scrollbar-gutter: stable;
-}
-@supports not (scrollbar-gutter: stable) {
-  html:has(#sms-app) { overflow-y: scroll; }
-}
 @media (max-width: 767px) {
   .sms-shell.row { grid-template-columns: minmax(0, 1fr); }
 }
