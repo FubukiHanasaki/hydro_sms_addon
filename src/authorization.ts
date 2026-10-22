@@ -39,7 +39,13 @@ export class AuthorizationService {
  async requireAdmin(uid:number){if(!await this.admin(uid))throw new SmsError(403,'需要插件管理员授权');}
  catalog(){return Object.entries(MODULES).map(([id,[label,actions]])=>({id,label,actions:Object.entries(actions).map(([a,label])=>({code:`${id}.${a}`,label,globalOnly:GLOBAL_ONLY.has(`${id}.${a}`)}))}));}
  async teaching(uid:number){const taught=await this.db.collection('sms_classes').distinct('domainId',{teacherUids:uid});return this.db.collection('domain.user').distinct('domainId',{domainId:{$in:taught},uid,join:true});}
- async members(uid:number){const ids=await this.db.collection('domain.user').distinct('domainId',{uid,join:true});if(await this.db.collection('sms_students').findOne({hydroUid:uid}))return ids;const taught=await this.teaching(uid);return ids.filter(id=>id==='system'||taught.includes(id));}
+ // A Hydro membership is independent of student/teacher profile binding.
+ // Member-scoped rules grant only the ordinary read scope; fullRead and the
+ // student/sensitive-data policies remain separate authorization decisions.
+ async members(uid:number){
+  if(!Number.isSafeInteger(uid)||uid<=0)return [];
+  return this.db.collection('domain.user').distinct('domainId',{uid,join:true});
+ }
  async scope(uid:number,code:string,config?:Config,knownAdmin?:boolean):Promise<string[]|null>{
   if(uid<=0||!CODES.includes(code))return [];
   if(knownAdmin??await this.admin(uid))return null;
