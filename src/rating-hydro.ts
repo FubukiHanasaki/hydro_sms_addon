@@ -7,6 +7,8 @@ import { SmsError } from './types';
 export function hydroContestGateway(ctx: Context): ContestGateway {
     return { async snapshot(domainId, contestId, difficulty) {
             const tid = new ObjectId(contestId);
+            const offline = await ctx.db.db.collection('offline_judge_contests').findOne({ _id: `${domainId}:${contestId}` as any });
+            if (offline && offline.state !== 'complete') throw new SmsError(409, '离线赛正式代码尚未完成导入评测');
             if (!await ctx.db.db.collection('document').findOne({ docType: 30, domainId, docId: tid }, { projection: { _id: 1 } }))
                 return null;
             const tdoc = await ContestModel.get(domainId, tid);
