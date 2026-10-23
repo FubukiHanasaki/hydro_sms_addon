@@ -15,6 +15,38 @@
     if (!response.ok || !Object.hasOwn(result, 'data')) throw new Error(result.message || '操作未完成，请刷新后确认'); return result.data;
   }
   function options(select, entries, current) { for (const [value, label] of entries) { const option = el('option', '', label); option.value = value; select.append(option); } select.value = current; }
+  let domainRequest = 0;
+  async function organizationView(view) {
+    const mine = view === 'domains';
+    $('sms-org-class-panel').hidden = mine; $('sms-org-domain-panel').hidden = !mine; $('sms-org-class-tools').hidden = mine;
+    for (const key of ['classes', 'domains']) { const tab = $(`sms-org-tab-${key}`); const active = key === view; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; }
+    if (!mine) { domainRequest++; return loadClasses(); }
+    const current = ++domainRequest; const root = $('sms-org-domain-panel'); root.replaceChildren(el('p', 'sms-empty', '加载中…'));
+    const url = new URL(app.dataset.homeDomains, location.origin); url.searchParams.set('sms_domains', '1');
+    try {
+      const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'text/html' } });
+      if (!response.ok) throw new Error('无法读取我的子域，请确认登录状态');
+      const parsed = new DOMParser().parseFromString(await response.text(), 'text/html'); const list = parsed.getElementById('sms-native-domain-list');
+      if (!list) throw new Error('服务响应异常，请刷新后重试');
+      if (current === domainRequest) root.replaceChildren(document.importNode(list, true));
+    } catch (e) { if (current === domainRequest) { root.replaceChildren(); error(e); } }
+  }
+  for (const view of ['classes', 'domains']) {
+    $(`sms-org-tab-${view}`).addEventListener('click', () => { history.replaceState(null, '', view === 'domains' ? '#domains' : '#organization'); organizationView(view).catch(error); });
+    $(`sms-org-tab-${view}`).addEventListener('keydown', e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 'classes' : e.key === 'End' ? 'domains' : view === 'classes' ? 'domains' : 'classes'; $(`sms-org-tab-${next}`).focus(); $(`sms-org-tab-${next}`).click(); } });
+  }
+  // Submit to Hydro's original personal-favorite operation, preserving native
+  // authentication, validation and cache invalidation. No membership writes.
+  $('sms-org-domain-panel').addEventListener('submit', async event => {
+    const form = event.target.closest('form[data-sms-domain-star]'); if (!form) return; event.preventDefault();
+    const node = form.querySelector('button'); if (node.disabled) return; node.disabled = true;
+    try {
+      const url = new URL(form.action, location.origin); if (url.origin !== location.origin) throw new Error('收藏地址无效');
+      const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: new URLSearchParams(new FormData(form)) });
+      const result = await response.json(); if (!response.ok || typeof result.star !== 'boolean') throw new Error('收藏未完成，请刷新后重试');
+      form.elements.star.value = String(!result.star); node.classList.toggle('activated', result.star); node.setAttribute('aria-pressed', String(result.star)); node.setAttribute('aria-label', result.star ? '取消收藏' : '收藏'); node.querySelector('.icon').className = `icon icon-star${result.star ? '' : '--outline'}`;
+    } catch (e) { error(e); } finally { node.disabled = false; }
+  });
   async function loadClasses() {
     const serial = ++request; const url = new URL(app.dataset.classes, location.origin);
     url.search = new URLSearchParams({ q: $('sms-class-query').value, status: $('sms-class-status').value, page });
@@ -156,5 +188,5 @@
   $('sms-class-status').addEventListener('change', () => { page = 1; loadClasses().catch(error); });
   $('sms-class-prev').addEventListener('click', () => { page--; loadClasses().catch(error); }); $('sms-class-next').addEventListener('click', () => { page++; loadClasses().catch(error); });
   app.addEventListener('sms:ready', e => { me = e.detail; $('sms-create-class').hidden = !me.capabilities['classes.create']; });
-  app.addEventListener('sms:tab', async e => { me = e.detail.me; if (!me || e.detail.tab !== 'organization') return; try { await loadClasses(); } catch (e) { error(e); } });
+  app.addEventListener('sms:tab', async e => { me = e.detail.me; if (!me || e.detail.tab !== 'organization') return; try { await organizationView(location.hash === '#domains' ? 'domains' : 'classes'); } catch (e) { error(e); } });
 })();

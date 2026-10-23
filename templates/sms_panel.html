@@ -1,7 +1,7 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=20261023-member-import">
-<div id="sms-app" class="sms-shell row" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
+<link rel="stylesheet" href="/sms-addon/panel.css?v=20261023-domain-tab">
+<div id="sms-app" class="sms-shell row" data-home-domains="{{ url('home_domain') }}" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
@@ -31,10 +31,12 @@
     <section id="sms-courses-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">课程管理</h1></div><div id="sms-courses-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-schedules-section" class="section visible" hidden><div class="section__header"><h1 class="section__title">排课管理</h1></div><div id="sms-schedules-workspace" class="section__body sms-teaching-workspace"></div></section>
     <section id="sms-organization-section" class="section visible" hidden>
-      <div class="section__header"><h1 class="section__title">班级与子域</h1><div class="section__tools"><span data-sms-export="classes">导出列表</span><button type="button" id="sms-create-class" class="primary rounded button" hidden>＋ 新建班级与子域</button></div></div>
-      <div class="section__body"><form id="sms-class-search-form" class="sms-org-toolbar"><input id="sms-class-query" type="search" class="textbox" placeholder="搜索名称或子域 ID" aria-label="搜索班级与子域"><select id="sms-class-status" class="select" aria-label="筛选班级状态"><option value="">全部状态</option><option value="active">开班中</option><option value="archived">已归档</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-class-summary" class="help-text"></p></div>
+      <div class="section__header"><h1 class="section__title">班级与子域</h1><div class="sms-organization-tabs" role="tablist" aria-label="班级与子域视图"><button type="button" id="sms-org-tab-classes" role="tab" aria-selected="true" aria-controls="sms-org-class-panel">班级列表</button><button type="button" id="sms-org-tab-domains" role="tab" aria-selected="false" aria-controls="sms-org-domain-panel">我的子域</button></div><div class="section__tools" id="sms-org-class-tools"><span data-sms-export="classes">导出列表</span><button type="button" id="sms-create-class" class="primary rounded button" hidden>＋ 新建班级与子域</button></div></div>
+      <div id="sms-org-class-panel" role="tabpanel" aria-labelledby="sms-org-tab-classes"><div class="section__body"><form id="sms-class-search-form" class="sms-org-toolbar"><input id="sms-class-query" type="search" class="textbox" placeholder="搜索名称或子域 ID" aria-label="搜索班级与子域"><select id="sms-class-status" class="select" aria-label="筛选班级状态"><option value="">全部状态</option><option value="active">开班中</option><option value="archived">已归档</option></select><button type="submit" class="rounded button">查询</button></form><p id="sms-class-summary" class="help-text"></p></div>
       <div class="section__body no-padding"><div class="section__table-container sms-table-scroll"><table class="data-table sms-table"><thead><tr><th>班级与子域</th><th>班型 / 学年</th><th>成员</th><th>状态</th><th>操作</th></tr></thead><tbody id="sms-class-rows"></tbody></table></div></div>
       <div class="section__body sms-pagination"><span id="sms-class-page" class="help-text"></span><div><button type="button" id="sms-class-prev" class="rounded button">上一页</button><button type="button" id="sms-class-next" class="rounded button">下一页</button></div></div>
+      </div>
+      <div id="sms-org-domain-panel" role="tabpanel" aria-labelledby="sms-org-tab-domains" class="section__body no-padding" hidden></div>
     </section>
     <section id="sms-accounts-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">账户管理</h1><div class="section__tools"><span data-sms-export="accounts">导出账户</span><button type="button" class="rounded button sms-bulk-admin" data-bulk="provision" hidden>批量补建账号</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-account-create" class="primary rounded button">＋ 创建账号</button></div></div>
@@ -101,7 +103,7 @@
 </div>
 <script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
 <script src="/sms-addon/panel.js?build=academic-auth-20261021" defer></script>
-<script src="/sms-addon/organization.js?v=20261023-member-import" defer></script>
+<script src="/sms-addon/organization.js?v=20261023-domain-tab" defer></script>
 <script src="/sms-addon/accounts.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
 <script src="/sms-addon/rating.js?build=academic-auth-20261021" defer></script>

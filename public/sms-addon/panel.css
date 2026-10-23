@@ -379,3 +379,15 @@
 .sms-member-import-table table { width: 100%; min-width: 580px; background: white; }
 .sms-member-import-table th, .sms-member-import-table td { padding: 8px 10px; vertical-align: middle; overflow-wrap: anywhere; }
 .sms-member-add-actions > .sms-org-actions { margin-top: 0; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+
+#sms-organization-section > .section__header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; }
+#sms-organization-section > .section__header .section__title { margin: 0; flex: 0 0 auto; }
+#sms-organization-section > .section__header .section__tools { margin-left: auto; }
+#sms-org-class-tools[hidden], #sms-org-class-panel[hidden], #sms-org-domain-panel[hidden] { display: none !important; }
+.sms-organization-tabs { display: flex; align-items: center; gap: 20px; }
+.sms-organization-tabs button { border: 0; background: transparent; padding: 8px 0; color: #8593a3; cursor: pointer; border-bottom: 2px solid transparent; font: inherit; }
+.sms-organization-tabs button[aria-selected="true"] { color: #3498db; font-weight: 600; border-bottom-color: #3498db; }
+.sms-organization-tabs button:focus-visible { outline: 2px solid #3498db; outline-offset: 3px; }
+#sms-org-domain-panel .star-form { margin-right: 8px; }
+#sms-org-domain-panel .sms-domain-star { cursor: pointer; border: 0; background: transparent; padding: 4px; color: #8593a3; }
+#sms-org-domain-panel .sms-domain-star.activated { color: #f3b52c; }

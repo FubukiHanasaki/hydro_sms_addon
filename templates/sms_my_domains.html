@@ -1,0 +1,27 @@
+<div id="sms-native-domain-list" class="sms-table-scroll">
+<table class="data-table sms-table">
+  <colgroup><col style="width:50px"><col><col><col></colgroup>
+  <thead><tr><th>&nbsp;</th><th>{{ _('Name') }} ({{ _('ID') }})</th><th>{{ _('My Role') }}</th><th>{{ _('Action') }}</th></tr></thead>
+  <tbody>
+  {% for ddoc in ddocs %}
+    <tr>
+      <td><img src="{{ avatarUrl(ddoc.avatar|default(''), 32) }}" width="32" height="32" alt=""></td>
+      <td>
+        {% set pinned = handler.user.pinnedDomains.includes(ddoc._id) %}
+        <form class="star-form form--inline" action="{{ url('home_domain') }}?id={{ ddoc._id|urlencode }}" method="post" data-sms-domain-star>
+          <input type="hidden" name="operation" value="star"><input type="hidden" name="star" value="{{ 'false' if pinned else 'true' }}">
+          <button type="submit" class="sms-domain-star{{ ' activated' if pinned else '' }}" aria-label="{{ '取消收藏' if pinned else '收藏' }} {{ ddoc.name }}" aria-pressed="{{ 'true' if pinned else 'false' }}">
+            <span class="icon icon-star{{ '' if pinned else '--outline' }}" aria-hidden="true"></span>
+          </button>
+        </form>
+        {{ ddoc.name }} ({{ ddoc._id }})
+      </td>
+      <td>{{ role[ddoc._id]|default('default') }}</td>
+      <td><a class="typo-a" href="{{ url('homepage', domainId=ddoc._id) }}">{{ _('Visit') }}</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4">暂无已加入的子域</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
