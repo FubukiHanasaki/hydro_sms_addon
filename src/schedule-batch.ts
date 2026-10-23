@@ -1,3 +1,4 @@
+import { inferImportHeaders } from './import-headers';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { randomUUID } from 'node:crypto';
 import type { Db } from 'mongodb';
@@ -20,7 +21,7 @@ export class ScheduleBatchService {
  constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService){}
  get jobs(){return this.db.collection<Batch>('sms_schedule_batches');}
  async init(){await this.jobs.createIndex({createdAt:-1});await this.jobs.createIndex({expiresAt:1},{expireAfterSeconds:0});await this.jobs.createIndex({status:1});}
- async parse(actor:number,value:unknown){await this.students.requireAction(actor,'schedules.batch');const f=await parseTableFile(value);if(f.rows.length>100)throw new SmsError(400,'每批最多 100 条排课');const mapping:Record<string,number>={};for(const [key,keys]of Object.entries(aliases)){const found=f.headers.flatMap((h,n)=>keys.some(k=>k.toLowerCase()===h.toLowerCase())?[n]:[]);if(found.length===1)mapping[key]=found[0];}return {...f,mapping,fields:SCHEDULE_FIELDS};}
+ async parse(actor:number,value:unknown){await this.students.requireAction(actor,'schedules.batch');const f=await parseTableFile(value);if(f.rows.length>100)throw new SmsError(400,'每批最多 100 条排课');return {...f,...inferImportHeaders(f.headers,aliases),fields:SCHEDULE_FIELDS};}
  inputs(value:Record<string,unknown>){
   if(value.items!==undefined){if(!Array.isArray(value.items)||!value.items.length||value.items.length>100)throw new SmsError(400,'每批需要 1–100 条排课');return value.items.map((item,n)=>({row:n+2,input:object(item),error:''}));}
   if(!Array.isArray(value.headers)||!value.headers.length||value.headers.length>50||!Array.isArray(value.rows)||!value.rows.length||value.rows.length>100)throw new SmsError(400,'每批需要 1–100 行有效排课');

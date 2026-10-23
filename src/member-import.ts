@@ -1,3 +1,4 @@
+import { inferImportHeaders } from './import-headers';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { randomUUID } from 'node:crypto';
 import type { Db } from 'mongodb';
@@ -23,13 +24,13 @@ export class MemberImportService {
     if (await this.batches.countDocuments({ actor, state: 'preview', expiresAt: { $gt: new Date() } }) >= 5) throw new SmsError(429, '待确认预览过多，请先取消已有预览');
     if (!value || typeof value !== 'object' || !/\.(xlsx|csv)$/i.test(String((value as Record<string, unknown>).filename ?? ''))) throw new SmsError(400, '请选择 XLSX 或 CSV 文件');
     const file = await parseTableFile(value);
-    const columns = file.headers.flatMap((h, n) => /^(uid|hydro\s*uid|hydro_uid)$/i.test(h.trim()) ? [n] : []);
-    if (columns.length !== 1) throw new SmsError(400, '表头必须包含唯一的 UID 列');
+    const { mapping } = inferImportHeaders(file.headers, { hydroUid: ['UID', 'Hydro UID', 'hydro_uid'] });
+    if (mapping.hydroUid === undefined) throw new SmsError(400, '无法唯一识别 UID 列，请保留一列 UID、Hydro UID 或 OJ UID，避免重复或含义不明的表头');
     if (file.rows.length > 200) throw new SmsError(400, '每次最多导入 200 名成员');
     const version = (await this.organization.metadata(domainId))?.version ?? 0;
     const rows: MemberRow[] = []; const seen = new Set<number>();
     for (const row of file.rows) {
-      const raw = row.values[columns[0]] || ''; const target = /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : null;
+      const raw = row.values[mapping.hydroUid] || ''; const target = /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : null;
       const errors = [...row.errors];
       if (target === null) errors.push('UID 必须是正整数');
       else if (seen.has(target)) errors.push('文件中 UID 重复');

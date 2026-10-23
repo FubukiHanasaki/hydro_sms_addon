@@ -1,3 +1,4 @@
+import { inferImportHeaders } from './import-headers';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
@@ -7,7 +8,7 @@ export const IMPORT_FIELDS = { name: '姓名', gender: '性别', grade: '年级'
 const aliases: Record<string, string[]> = { name:['姓名','学生姓名','学生','name'], gender:['性别','gender','sex'], grade:['年级','grade'],school:['学校','所在学校','school'],status:['学生状态','状态','学籍状态','status'],enrollmentDate:['入学日期','入学时间','enrollmentDate','enrollment_date'],currentStage:['学习阶段','当前阶段','currentStage','current_stage'],hydroUid:['Hydro UID','HydroUID','UID','hydroUid','hydro_uid'],rating:['Rating','rating分数','rating_score'],ratingRecordedAt:['Rating结算时间','最后结算时间','Rating记录时间','ratingRecordedAt','recordedAt'],accountMode:['账号处理','账户处理','accountMode'] };
 export interface FileRow { row:number; values:string[]; errors:string[] }
 export interface ParsedFile { sheets:string[];sheet:string;headers:string[];rows:FileRow[] }
-export function guessMapping(headers:string[]) { const result:Record<string,number>={};for(const [key,names]of Object.entries(aliases)){const matches=headers.flatMap((v,n)=>names.some(a=>a.toLowerCase()===v.replace(/^\uFEFF/,'').trim().toLowerCase())?[n]:[]);if(matches.length===1)result[key]=matches[0];}return result; }
+export function guessMapping(headers:string[]) { return inferImportHeaders(headers, aliases).mapping; }
 export async function parseTableFile(value:unknown):Promise<ParsedFile> {
   const b=object(value);if(Object.keys(b).some(k=>!['filename','content','sheet'].includes(k)))throw new SmsError(400,'请求包含未知字段');
   const name=text(b.filename,160,'文件名'),ext=name.split('.').at(-1)?.toLowerCase();if(!ext||!['xlsx','xls','csv'].includes(ext))throw new SmsError(400,'请选择 XLSX、XLS 或 CSV 文件');
@@ -23,4 +24,4 @@ export async function parseTableFile(value:unknown):Promise<ParsedFile> {
   return result;
 }
 
-export async function parseStudentFile(value:unknown){const result=await parseTableFile(value);return {...result,mapping:guessMapping(result.headers),fields:IMPORT_FIELDS};}
+export async function parseStudentFile(value:unknown){const result=await parseTableFile(value);return {...result,...inferImportHeaders(result.headers, aliases),fields:IMPORT_FIELDS};}
