@@ -380,7 +380,7 @@
 .sms-member-import-table th, .sms-member-import-table td { padding: 8px 10px; vertical-align: middle; overflow-wrap: anywhere; }
 .sms-member-add-actions > .sms-org-actions { margin-top: 0; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 
-#sms-organization-section > .section__header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; }
+#sms-organization-section > .section__header { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 12px 24px; }
 #sms-organization-section > .section__header .section__title { margin: 0; flex: 0 0 auto; }
 #sms-organization-section > .section__header .section__tools { margin-left: auto; }
 #sms-org-class-tools[hidden], #sms-org-class-panel[hidden], #sms-org-domain-panel[hidden] { display: none !important; }
