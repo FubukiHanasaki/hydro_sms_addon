@@ -78,7 +78,41 @@
         try { await api(`${app.dataset.domains}/${encodeURIComponent(id)}/members`, { uid: selectedUser.uid, joined: true, kind: kind.value, version }); addQuery.value = ''; selectedUser = null; selected.textContent = ''; results.replaceChildren(); await loadClasses(); await load(); }
         catch (e) { await load(); throw e; } finally { busy = false; confirm.toggleAttribute('data-disabled', !selectedUser); confirm.disabled = !selectedUser; }
       }, 'primary rounded button'); confirm.id = 'sms-member-confirm-add'; confirm.disabled = true; confirm.setAttribute('data-disabled', '');
-      const controls = el('div', 'sms-member-add-actions'); controls.append(selected, confirm); add.append(results, controls); root.prepend(add);
+      const controls = el('div', 'sms-member-add-actions'); const addActions = el('div', 'sms-org-actions');
+      const file = el('input'); file.type = 'file'; file.accept = '.xlsx,.csv'; file.hidden = true; file.setAttribute('aria-label', '导入成员文件');
+      const preview = el('section', 'sms-member-import'); preview.hidden = true; preview.setAttribute('aria-label', '成员导入预览');
+      const importBase = `${app.dataset.domains}/${encodeURIComponent(id)}/member-import`; let batchId = ''; let uploading = false;
+      const cancelPreview = async () => { if (batchId) await api(`${importBase}/${encodeURIComponent(batchId)}/cancel`, {}); batchId = ''; preview.hidden = true; preview.replaceChildren(); };
+      const importButton = button('批量导入', () => { if (!busy && !uploading) file.click(); }); importButton.id = 'sms-member-import-open';
+      file.addEventListener('change', async () => {
+        const selectedFile = file.files[0]; file.value = ''; if (!selectedFile || uploading || busy) return;
+        uploading = true; importButton.disabled = true; $('sms-org-error').textContent = ''; $('sms-org-error').hidden = true;
+        try {
+          if (!/\.(xlsx|csv)$/i.test(selectedFile.name) || selectedFile.size > 2 * 1024 * 1024) throw new Error('请选择不超过 2 MB 的 XLSX 或 CSV 文件');
+          await cancelPreview();
+          const content = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('读取文件失败')); reader.readAsDataURL(selectedFile); });
+          const data = await api(importBase, { filename: selectedFile.name, content });
+          if (activeDialog !== dialogSerial) { await api(`${importBase}/${encodeURIComponent(data._id)}/cancel`, {}); return; }
+          batchId = data._id; preview.replaceChildren(); preview.hidden = false;
+          const counts = { add: 0, existing: 0, invalid: 0 }; for (const row of data.rows) counts[row.status]++;
+          const header = el('div', 'sms-member-import-heading'); header.append(el('strong', '', '导入预览'), el('span', 'help-text', `新增 ${counts.add} · 已有 ${counts.existing} · 无效 ${counts.invalid}`)); preview.append(header);
+          const scroll = el('div', 'sms-member-import-table'); const table = el('table', 'sms-bulk-table'); const head = el('thead'); const heading = el('tr');
+          for (const label of ['行', 'UID', '账号 / 姓名', '导入身份', '结果']) heading.append(el('th', '', label)); head.append(heading); table.append(head); const rows = el('tbody');
+          for (const item of data.rows) { const tr = el('tr'); for (const value of [item.row, item.uid ?? '—', [item.username, item.name].filter(Boolean).join(' / ') || '—', item.status === 'existing' ? '保留原身份' : item.kind === 'student' ? '学生' : '普通成员', item.errors.join('；') || (item.status === 'existing' ? '跳过已有成员' : '待添加')]) tr.append(el('td', '', value)); rows.append(tr); }
+          table.append(rows); scroll.append(table); preview.append(scroll);
+          const actions = el('div', 'sms-org-actions');
+          const apply = button('确认导入', async () => {
+            if (busy || !batchId) return; busy = true;
+            try { const result = await api(`${importBase}/${encodeURIComponent(batchId)}/confirm`, {}); batchId = ''; preview.replaceChildren(el('p', 'help-text', `已添加 ${result.added} 名成员，跳过 ${result.skipped} 名已有成员`)); await loadClasses(); await load(); }
+            catch (e) { await load(); throw e; } finally { busy = false; }
+          }, 'primary rounded button'); apply.id = 'sms-member-import-confirm'; apply.disabled = !!counts.invalid || !counts.add; apply.toggleAttribute('data-disabled', apply.disabled);
+          actions.append(button('取消', cancelPreview), apply); preview.append(actions);
+        } catch (e) { error(e); } finally { uploading = false; importButton.disabled = false; }
+      });
+      importButton.title = '第一行表头为 UID，支持 XLSX / CSV，每次最多 200 人';
+      $('sms-org-dialog').addEventListener('close', () => { cancelPreview().catch(() => {}); }, { once: true });
+      addActions.append(importButton, confirm); controls.append(selected, addActions); add.append(results, controls, file); root.prepend(add); add.after(preview);
+
       let timer; let accountRequest = 0;
       const search = async () => { const current = ++accountRequest; if (!addQuery.value.trim()) { results.replaceChildren(); return; } const url = new URL(app.dataset.users, location.origin); url.search = new URLSearchParams({ q: addQuery.value.trim(), classId:id }); const users = await api(url); if (current !== accountRequest || activeDialog !== dialogSerial) return;
         results.replaceChildren(); for (const user of users) results.append(button(`${user.username} · UID ${user.uid}`, () => { selectedUser = user; selected.textContent = `已选择 ${user.username}（UID ${user.uid}）`; confirm.disabled = false; confirm.removeAttribute('data-disabled'); results.replaceChildren(); })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));

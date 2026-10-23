@@ -369,3 +369,13 @@
 .sms-plugin-info a{font-size:11px;color:inherit;overflow-wrap:anywhere}
 .sms-plugin-info a:hover{color:#358ecc;text-decoration:underline}
 .sms-plugin-info .icon{margin-left:5px}
+
+/* Member import stays in the roster dialog, with independently scrolling preview. */
+.sms-member-import { border: 1px solid #dce5ec; border-radius: 6px; padding: 16px; margin: 0 0 20px; background: #f8fafc; }
+.sms-member-import[hidden] { display: none; }
+.sms-member-import-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.sms-member-import-heading .help-text { margin: 0; }
+.sms-member-import-table { overflow: auto; max-height: 280px; margin-bottom: 12px; }
+.sms-member-import-table table { width: 100%; min-width: 580px; background: white; }
+.sms-member-import-table th, .sms-member-import-table td { padding: 8px 10px; vertical-align: middle; overflow-wrap: anywhere; }
+.sms-member-add-actions > .sms-org-actions { margin-top: 0; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }

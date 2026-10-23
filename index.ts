@@ -1,3 +1,4 @@
+import { MemberImportService } from './src/member-import';
 import { AcademicService } from './src/academic';
 import { ScheduleBatchService } from './src/schedule-batch';
 import { ExportService } from './src/exports';
@@ -26,6 +27,8 @@ export async function apply(ctx: Context) {
     join: (id, uid, joined) => DomainModel.setJoin(id, uid, joined),
   });
   await organization.init();
+  const memberImports = new MemberImportService(ctx.db.db, service, organization);
+  await memberImports.init();
   const teachers = new TeacherService(ctx.db.db, service, organization);
   await teachers.init();
   const accounts = new AccountManagement(ctx.db.db, service, {
@@ -266,6 +269,18 @@ export async function apply(ctx: Context) {
   ctx.Route('sms_api_schedules_save', '/sms/api/classes/:id/schedules', SmsScheduleSaveHandler);
   ctx.Route('sms_api_lessons_save', '/sms/api/classes/:id/lessons/:lessonId', SmsLessonSaveHandler);
   ctx.Route('sms_api_domains', '/sms/api/domains', SmsDomainsHandler);
+  class SmsMemberImportHandler extends SmsApiHandler {
+    async post() { await this.run(() => memberImports.preview(this.user._id, this.context.params.id, this.body())); }
+  }
+  class SmsMemberImportConfirmHandler extends SmsApiHandler {
+    async post() { await this.run(() => memberImports.confirm(this.user._id, this.context.params.id, this.context.params.batch)); }
+  }
+  class SmsMemberImportCancelHandler extends SmsApiHandler {
+    async post() { await this.run(() => memberImports.cancel(this.user._id, this.context.params.id, this.context.params.batch)); }
+  }
+  ctx.Route('sms_api_member_import', '/sms/api/domains/:id/member-import', SmsMemberImportHandler);
+  ctx.Route('sms_api_member_import_confirm', '/sms/api/domains/:id/member-import/:batch/confirm', SmsMemberImportConfirmHandler);
+  ctx.Route('sms_api_member_import_cancel', '/sms/api/domains/:id/member-import/:batch/cancel', SmsMemberImportCancelHandler);
   ctx.Route('sms_api_domain_members', '/sms/api/domains/:id/members', SmsDomainMembersHandler);
   ctx.Route('sms_api_classes', '/sms/api/classes', SmsClassesHandler);
   ctx.Route('sms_api_class', '/sms/api/classes/:id', SmsClassHandler);
