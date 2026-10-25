@@ -2,7 +2,7 @@
 
 Hydro 原生学生与教务管理插件，复用 Hydro 账号和登录会话，在同一站点内提供学生档案、教师档案、班级与子域、课程、排课、考勤和 Rating 管理。
 
-**版本：0.2.0** · **作者：FubukiHanasaki** · **许可证：AGPL-3.0-or-later**
+**版本：0.3.0** · **作者：FubukiHanasaki** · **许可证：AGPL-3.0-or-later**
 
 仓库：[FubukiHanasaki/hydro_sms_addon](https://github.com/FubukiHanasaki/hydro_sms_addon)
 
@@ -243,7 +243,7 @@ npm run check
 | 保存返回 403 | 检查会话、插件权限，以及反向代理传递的外部协议和 Host |
 | 修改或确认返回 409 | 资料、权限或预览版本发生变化，刷新记录或重新预览后再确认 |
 | 导入中断或显示部分完成 | 从导入/批次记录打开原批次继续，先核对逐行结果 |
-| Rating 未自动更新 | 确认比赛已在插件启用计分且难度已设置，比赛已结束、成绩评测完成 |
+| Rating 尚未更新 | 在模拟赛管理完成历史 Rated 初始化；比赛结束并评测完成后，由插件管理员核验并发布 Rating |
 
 ## 详细文档
 
@@ -253,6 +253,7 @@ npm run check
 - [课程、排课、考勤与班级详情](docs/teaching.md)
 - [批量排课](docs/schedule-batch.md)
 - [教务管理](docs/academic.md)
+- [模拟赛、历史 Rated 初始化与赛后核验](docs/exams.md)
 - [Rating 系统与导入接口](docs/rating.md)
 - [批量升年级与账号操作](docs/bulk.md)
 - [各功能导出](docs/exports.md)

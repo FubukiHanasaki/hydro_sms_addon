@@ -1,6 +1,6 @@
 {
   "name": "hydro-sms-addon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hydro 原生学生信息管理插件，独立业务授权与隐私控制",
   "author": "FubukiHanasaki",
   "license": "AGPL-3.0-or-later",

@@ -1,6 +1,6 @@
 # Rating 系统
 
-作者：FubukiHanasaki。插件版本保持 0.2.0。
+作者：FubukiHanasaki。插件版本保持 0.3.0。
 
 ## 模块边界与算法升级
 

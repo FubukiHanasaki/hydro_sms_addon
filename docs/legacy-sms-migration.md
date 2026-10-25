@@ -1,6 +1,6 @@
 # 旧 Python SMS 迁移预览
 
-作者：FubukiHanasaki。版本保持 0.2.0。
+作者：FubukiHanasaki。版本保持 0.3.0。
 
 ## 只读预览
 

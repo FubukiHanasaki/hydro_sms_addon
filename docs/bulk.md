@@ -1,6 +1,6 @@
 # 批量操作
 
-按具体批量操作独立鉴权，使用 Hydro 登录会话与插件同源校验。升年级及撤销需全局 `students.promote/write/read`；补建账号需 `accounts.provision` 和全局学生绑定、读取；重置密码需 `accounts.password/read`。插件管理员默认具备全部操作，记录列表只显示有相应完整权限的操作。版本号保持 0.2.0。
+按具体批量操作独立鉴权，使用 Hydro 登录会话与插件同源校验。升年级及撤销需全局 `students.promote/write/read`；补建账号需 `accounts.provision` 和全局学生绑定、读取；重置密码需 `accounts.password/read`。插件管理员默认具备全部操作，记录列表只显示有相应完整权限的操作。版本号保持 0.3.0。
 
 ## 批量升年级
 
