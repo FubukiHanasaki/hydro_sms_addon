@@ -11,15 +11,18 @@ export function examHost(){return {async contest(actor:number,domain:string,id:s
  return c;
 }};}
 export function installExams(ctx:Context,exams:ExamService){
- installCorrectionRecords(ctx,'smsCorrection',async(h,record,id)=>{
+ const correctionRecord=async(actor:number,domain:string,id:string,owner:number)=>{
+  try {
   await exams.requireReady();
-  await exams.model(h.user._id,h.domain._id,id,'exams.read');
-  if(record.uid===h.user._id&&!await exams.correction(h.user._id,h.domain._id,id))return null;
-  const claim=await ctx.db.db.collection('offline_judge_contests').findOne({_id:`${h.domain._id}:${id}` as any});
+  await exams.model(actor,domain,id,'exams.read');
+  if(owner===actor&&!await exams.correction(actor,domain,id))return null;
+  const claim=await ctx.db.db.collection('offline_judge_contests').findOne({_id:`${domain}:${id}` as any});
   if(claim&&claim.state!=='complete')return null;
-  return exams.native(h.user._id,{domainId:h.domain._id,contestId:id});
- });
- ctx.effect(()=>{const bridge={reviewRequired:true,authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
+  return exams.native(actor,{domainId:domain,contestId:id});
+  } catch(error) { if(error instanceof SmsError)throw new ForbiddenError();throw error; }
+ };
+ installCorrectionRecords(ctx,'smsCorrection',(h,record,id)=>correctionRecord(h.user._id,h.domain._id,id,record.uid));
+ ctx.effect(()=>{const bridge={reviewRequired:true,correctionRecord,authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
  // Apply the independent module scope to every native contest subpage/API,
  // while retaining all original Hydro checkers and hidden/assign restrictions.
  ctx.on('handler/before',async(h:any)=>{
