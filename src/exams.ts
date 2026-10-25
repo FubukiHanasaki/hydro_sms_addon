@@ -65,9 +65,8 @@ export class ExamService {
   await this.requireReady();const e=await this.exams.findOne({_id:this.key(domainId,contestId)});
   if(e)await this.require(actor,e,'exams.update');else {await this.students.requireAction(actor,'exams.create',[domainId]);await this.students.requireAction(actor,'exams.update',[domainId]);}
   const cfg=await this.db.collection('sms_rating_contests').findOne({_id:this.key(domainId,contestId) as any});
-  const scope=await this.students.authorization.scope(actor,'exams.update');
-  const domains=await this.db.collection('domain').find(scope===null?{}:{_id:{$in:scope} as any},{projection:{_id:1,name:1}}).toArray();
-  return {exam:e??{domainId,contestId,classIds:[domainId],examType:'模拟赛',scope:'',source:'',remark:'',version:0},rated:cfg?.enabled??false,difficulty:cfg?.difficulty??'CSP-J',difficulties:DIFFICULTIES,classes:domains.map(d=>({id:String(d._id),name:d.name||String(d._id)}))};
+  const examTypes=[...new Set(['模拟赛','周测','月测','真题赛',...(e?.examType?[e.examType]:[])])];
+  return {exam:e??{domainId,contestId,classIds:[domainId],examType:'模拟赛',scope:'',source:'',remark:'',version:0},rated:cfg?.enabled??false,difficulty:cfg?.difficulty??'CSP-J',difficulties:DIFFICULTIES,examTypes};
  }
  async candidates(actor:number,domainValue:unknown){
   const domainId=text(domainValue,160,'比赛子域');await this.students.requireAction(actor,'exams.create',[domainId]);

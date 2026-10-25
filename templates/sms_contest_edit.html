@@ -6,17 +6,8 @@
   <div class="section__body">
     <input type="hidden" name="smsVersion" value="{{ smsEditor.exam.version }}">
     <div class="row">
-      <div class="medium-6 columns"><label>参赛班级
-        <select name="smsClassIds" multiple size="5" required>
-          {% for c in smsEditor.classes %}<option value="{{ c.id }}"{% if c.id in smsEditor.exam.classIds %} selected{% endif %}>{{ c.name }} ({{ c.id }})</option>{% endfor %}
-        </select>
-      </label></div>
-      <div class="medium-3 columns"><label>比赛类型<input class="textbox" name="smsExamType" value="{{ smsEditor.exam.examType }}" maxlength="80"></label></div>
-      <div class="medium-3 columns"><label>比赛难度<select name="smsDifficulty">{% for level in smsEditor.difficulties %}<option value="{{ level }}"{% if level == smsEditor.difficulty %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label></div>
-    </div>
-    <div class="row">
-      <div class="medium-6 columns"><label>比赛范围<input class="textbox" name="smsScope" value="{{ smsEditor.exam.scope }}" maxlength="160"></label></div>
-      <div class="medium-6 columns"><label>来源<input class="textbox" name="smsSource" value="{{ smsEditor.exam.source }}" maxlength="300"></label></div>
+      <div class="medium-6 columns"><label>比赛类型<select name="smsExamType">{% for kind in smsEditor.examTypes %}<option value="{{ kind }}"{% if kind == smsEditor.exam.examType %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select></label></div>
+      <div class="medium-6 columns"><label>比赛难度<select name="smsDifficulty">{% for level in smsEditor.difficulties %}<option value="{{ level }}"{% if level == smsEditor.difficulty %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label></div>
     </div>
     <label>说明<textarea class="textbox" name="smsRemark" maxlength="2000" rows="3">{{ smsEditor.exam.remark }}</textarea></label>
   </div>

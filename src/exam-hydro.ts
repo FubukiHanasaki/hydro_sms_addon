@@ -49,8 +49,8 @@ export function installExams(ctx:Context,exams:ExamService){
    try {
     if(!Object.hasOwn(b,'smsVersion'))throw new SmsError(409,'请刷新比赛编辑页后重试');
     const payload={domainId:h.domain._id,contestId:id,version:Number(b.smsVersion),
-     classIds:Array.isArray(b.smsClassIds)?b.smsClassIds:b.smsClassIds?[b.smsClassIds]:[],
-     examType:b.smsExamType,scope:b.smsScope,source:b.smsSource,remark:b.smsRemark,
+     classIds:existing?.classIds??[h.domain._id],
+     examType:b.smsExamType,scope:existing?.scope??'',source:existing?.source??'',remark:b.smsRemark,
      difficulty:b.smsDifficulty,rated:!!(b.rated&&!['false','off','no','0'].includes(b.rated))};
     if(!['oi','ioi','strictioi','acm'].includes(b.rule))throw new SmsError(400,'模拟赛暂不支持此赛制');
     await exams.save(h.user._id,payload,()=>original(...args));
