@@ -161,13 +161,13 @@
         for (const m of data.members) {
           const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.studentName || m.username), el('div', 'sms-secondary', `${m.studentName ? `${m.username} · ` : ''}UID ${m.uid}`));
           row.append(person); const actions = el('div', 'sms-member-actions');
-          if (data.canManage && (m.kind!=='teacher'||data.canTeachers)) {
+          if (m.canEdit) {
             row.classList.add('sms-member-editable'); const identity = el('select', 'select sms-member-role-select'); identity.setAttribute('aria-label', `修改 ${m.username} 的身份`);
             options(identity, [['member','普通成员'],...(data.canTeachers?[['teacher','任课教师']]:[]),['student',id==='system'?'学生':'学生（需档案）']],m.kind); row.append(identity);
             const apply = button('保存身份', async () => { if (busy) return; busy = true; identity.disabled = true; try { await api(url.pathname, { uid: m.uid, joined: true, roleOnly: true, kind: identity.value, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } });
             apply.disabled = true; apply.setAttribute('aria-label', `保存 ${m.username} 的身份`); identity.addEventListener('change', () => { apply.disabled = identity.value === m.kind; }); actions.append(apply);
           } else row.append(el('span', 'sms-member-kind', ({ teacher: '任课教师', student: '学生', member: '普通成员' })[m.kind]));
-          if (m.canRemove && (m.kind!=='teacher'||data.canTeachers)) actions.append(button('移除', async () => { if (busy) return; busy = true; try { await api(url.pathname, { uid: m.uid, joined: false, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } }));
+          if (m.canRemove) actions.append(button('移除', async () => { if (busy) return; busy = true; try { await api(url.pathname, { uid: m.uid, joined: false, version }); await loadClasses(); await load(); } catch (e) { await load(); throw e; } finally { busy = false; } }));
           else if (m.uid === c.owner) actions.append(el('span', 'help-text', '所有者'));
           row.append(actions); list.append(row);
         }

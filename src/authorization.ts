@@ -26,7 +26,7 @@ const rules=(codes:string[],scope:Scope='all')=>Object.fromEntries(codes.map(c=>
 export const BUILTINS:Template[] = [
  {id:'legacy',name:'现有身份权限',builtin:true,rules:{}},
  {id:'office',name:'教务',builtin:true,rules:rules(CODES.filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')&&!c.startsWith('rating.')&&c!=='students.promote'&&c!=='exams.review'))},
- {id:'teaching',name:'任课教师',builtin:true,rules:rules(['students.read','students.export','classes.read','classes.export','schedules.read','schedules.export','courses.read','courses.create','courses.update','courses.link','reports.read','exams.read','exams.create','exams.update','exams.archive','exams.submit','exams.export'],'teaching')},
+ {id:'teaching',name:'任课教师',builtin:true,rules:rules(['students.read','students.export','classes.read','classes.members','classes.export','schedules.read','schedules.export','courses.read','courses.create','courses.update','courses.link','reports.read','exams.read','exams.create','exams.update','exams.archive','exams.submit','exams.export'],'teaching')},
  {id:'readonly',name:'只读教务',builtin:true,rules:rules(CODES.filter(c=>c.endsWith('.read')||c.endsWith('.export')).filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')))},
  {id:'self',name:'学生本人',builtin:true,rules:rules(['classes.read','schedules.read','courses.read','exams.read'],'member')},
  {id:'none',name:'无业务默认权限',builtin:true,rules:{}},
@@ -54,7 +54,7 @@ export class AuthorizationService {
   let base=template?.rules[code];
   if(template?.id==='legacy'){
    if(['exams.read','classes.read','schedules.read','courses.read','classes.export','schedules.export','courses.export','reports.export'].includes(code))base='member';
-   if(['exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
+   if(['classes.members','exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
   }
   if(base==='all')return null;
   const ids=new Set<string>(base==='teaching'?await this.teaching(uid):base==='member'?await this.members(uid):[]),now=Date.now();
