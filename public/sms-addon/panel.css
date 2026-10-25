@@ -392,7 +392,7 @@
 #sms-org-domain-panel .sms-domain-star { cursor: pointer; border: 0; background: transparent; padding: 4px; color: #8593a3; }
 #sms-org-domain-panel .sms-domain-star.activated { color: #f3b52c; }
 
-.sms-exam-dialog { width: min(1060px,calc(100vw - 32px)); max-width: 1060px; max-height: 90vh; border: 0; border-radius: 5px; padding: 0; color: #34495e; }
+.sms-exam-dialog { width: min(1060px,calc(100vw - 32px)); max-width: 1060px; max-height: 90vh; border: 0; border-radius: 5px; padding: 0; color: #000; }
 .sms-exam-dialog::backdrop { background: rgba(30,40,50,.48); }
 .sms-exam-dialog > form { display: flex; flex-direction: column; max-height: 90vh; margin: 0; }
 .sms-exam-dialog .section__header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; flex-shrink: 0; }
@@ -409,18 +409,30 @@
 .sms-exam-consent input { margin-top: 5px; flex-shrink: 0; }
 .sms-exam-facts { display: flex; gap: 10px 26px; flex-wrap: wrap; line-height: 1.8; }
 .sms-exam-remark { white-space: pre-wrap; overflow-wrap: anywhere; margin: 16px 0 0; }
-.sms-exam-native { padding-top: 8px; padding-bottom: 4px; color: #657687; font-size: .875rem; }
+.sms-exam-native { padding-top: 8px; padding-bottom: 4px; color: #000; font-size: .875rem; }
 .sms-exam-native-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; }
 .sms-exam-native .sms-exam-facts { gap: 6px 16px; min-width: 0; overflow-wrap: anywhere; }
-.sms-exam-type { font-weight: 600; color: #34495e; }
 .sms-exam-native-actions { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin-left: auto; }
-.sms-exam-native-actions .tool-button { appearance: none; border: 0; background: transparent; padding: 3px 0; margin: 0; color: #5f8cab; font: inherit; line-height: 1.8; text-decoration: none; cursor: pointer; }
-.sms-exam-native-actions .tool-button:hover { color: #3498db; }
+.sms-exam-native-actions .tool-button { appearance: none; border: 0; background: transparent; padding: 3px 0; margin: 0; color: #000; font: inherit; line-height: 1.8; text-decoration: none; cursor: pointer; }
+.sms-exam-native-actions .tool-button:hover { color: #000; }
 .sms-exam-native-actions .tool-button:focus-visible { outline: 2px solid #3498db; outline-offset: 3px; }
-.sms-exam-native-actions .tool-button:disabled { opacity: .5; cursor: wait; }
-.sms-exam-native .sms-exam-remark,.sms-exam-correction-note { margin: 8px 0 0; line-height: 1.6; }
-.sms-exam-correction-note { color: #8593a3; font-size: .8rem; }
+.sms-exam-native-actions .tool-button:disabled { opacity: 1; cursor: wait; }
+.sms-exam-native .sms-exam-remark { margin: 8px 0 0; line-height: 1.6; }
 #sms-exam-native-error:empty { display: none; }
-#sms-exam-native-error:not(:empty) { margin-top: 8px; line-height: 1.6; color: #c0392b; }
+#sms-exam-native-error:not(:empty) { margin-top: 8px; line-height: 1.6; color: #000; }
 .sms-exam-table { min-width: 760px; }
 @media (max-width:767px) { .sms-exam-dialog { width: calc(100vw - 16px); } .sms-exam-dialog .sms-form-grid { grid-template-columns: minmax(0,1fr); } .sms-exam-dialog .sms-dialog-footer { flex-wrap: wrap; } }
+
+/* Product rule: black text; hierarchy comes from spacing, size and weight. */
+:is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating),
+:is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) *,
+body:has(#sms-exam-native) .section,body:has(#sms-exam-native) .section *,
+body:has(.sms-profile-tabs) .section,body:has(.sms-profile-tabs) .section * { color: #000 !important; }
+:is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) input::placeholder { color: #000; opacity:1; }
+:is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) :disabled { opacity:1; -webkit-text-fill-color:#000; }
+:is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) .button:disabled { background:#eee; border-color:#ddd; cursor:not-allowed; }
+:is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) svg text { fill:#000 !important; opacity:1; }
+
+:is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) :is(.sms-secondary,.help-text,.sms-rating-chart-empty,.sms-rating-metrics span) { opacity:1; }
+
+:is(.sms-shell,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) .sms-rating-tier { background:color-mix(in srgb,var(--sms-tier-color,#888) 18%,white) !important; }
