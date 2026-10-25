@@ -17,7 +17,7 @@
       {% set _badge = udoc.badge.split('#') %}
       <span class="user-profile-badge v-center" style="background-color:#{{ _badge[1] }}{% if _badge[2] %};color:#{{ _badge[2] }}{% endif %}">{{ _badge[0] }}</span>
     {% endif %}
-    {% if levelbadge %}
+    {% if levelbadge and not udoc.smsRatingHidden %}
       <a class="user-profile-badge v-center sms-rating-title" style="color:{{ udoc.smsRating.color|default('#777777') }};background:transparent" href="{{ url('user_detail', uid=udoc._id) }}" data-tooltip="Rating {{ udoc.smsRating.rating|default(0) }}">{{ udoc.smsRating.title|default('未评级') }}</a>
     {% endif %}
     {% if modbadge %}

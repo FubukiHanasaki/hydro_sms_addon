@@ -150,10 +150,10 @@ export async function apply(ctx: Context) {
   }
 
   class SmsRatingBoardHandler extends SmsApiHandler {
-    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.domain._id, this.context.query.classId); return { ...await rating.board(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school, this.user._id), classScope: scope }; }); }
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.domain._id, this.context.query.classId); return { ...await rating.publicBoard(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school, this.user._id), classScope: scope }; }); }
   }
   class SmsRatingHistoryHandler extends SmsApiHandler {
-    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.history(this.context.params.uid, this.context.query.page ?? 1)); }
+    async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(() => rating.visibleHistory(this.user._id, this.context.params.uid, this.context.query.page ?? 1)); }
   }
   class SmsRatingImportHandler extends SmsApiHandler {
     async post() { await this.run(() => rating.importRecords(this.user._id, this.body())); }

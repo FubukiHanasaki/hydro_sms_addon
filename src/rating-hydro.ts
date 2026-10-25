@@ -43,23 +43,38 @@ export function installRating(ctx: Context, rating: RatingService, organization:
     ctx.on('handler/after', async (h) => {
         if (!h.response.template)
             return;
-        const seen = new Set<object>(), users: any[] = [];
-        const visit = (v: any, depth: number) => { if (!v || typeof v !== 'object' || seen.has(v) || depth > 5)
+        const identified = await rating.canIdentify(h.user?._id ?? 0);
+        const seen = new Set<object>(), copies = new WeakMap<object, any>(), users: any[] = [];
+        const visit = (v: any, depth: number, parent?: any, key?: string) => {
+            if (v && typeof v === 'object' && copies.has(v)) { if (parent && key) parent[key] = copies.get(v); return; }
+            if (!v || typeof v !== 'object' || seen.has(v) || depth > 5)
             return; seen.add(v); if (typeof v._id === 'number' && typeof v.uname === 'string') {
+            if (!identified && v._id !== h.user?._id && parent && key) {
+                // Never redact shared Hydro user/cache objects in place.
+                const original = v;
+                v = Object.assign(Object.create(Object.getPrototypeOf(v)), v);
+                copies.set(original, v);
+                parent[key] = v;
+                v.smsRatingHidden = true;
+            }
             users.push(v);
             return;
         } for (const [k, item] of Object.entries(v))
             if (!k.startsWith('_'))
-                visit(item, depth + 1); };
+                visit(item, depth + 1, v, k); };
         visit(h.response.body, 0);
-        await Promise.all(users.map(decorate));
+        await Promise.all(users.map(async u => {
+            if (u.smsRatingHidden) { delete u.smsRating; u.rp = null; u.level = 0; u.rank = null; }
+            else await decorate(u);
+        }));
+        h.response.addHeader('Cache-Control', 'private, no-store');
     });
     ctx.on('handler/before/DomainRank', async (h) => {
         h.checkPerm(PERM.PERM_VIEW_RANKING);
         let scope;
         try { scope = await organization.ratingScope(h.user?._id ?? 0, h.domain._id, h.context.query.classId); }
         catch (error) { if (error instanceof SmsError) throw new ForbiddenError(); throw error; }
-        const data = await rating.board(scope.domainId, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all');
+        const data = await rating.publicBoard(scope.domainId, h.context.query.q, h.context.query.page ?? 1, h.context.query.mode ?? 'all', '', '', h.user?._id ?? 0);
         h.response.template = 'sms_ranking.html';
         h.response.body = { page_name: 'ranking', smsBoard: data, smsClassScope: scope, smsRatingApi: h.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, '') };
         h.response.addHeader('Cache-Control', 'private, no-store');
@@ -79,7 +94,7 @@ export function installRating(ctx: Context, rating: RatingService, organization:
         replaceRp();
         if (h.constructor.name === 'HomeHandler')
             h.getRanking = async (domainId: string, limit = 50) => {
-                if (!h.user.hasPerm(PERM.PERM_VIEW_RANKING))
+                if (!h.user.hasPerm(PERM.PERM_VIEW_RANKING) || !await rating.canIdentify(h.user?._id ?? 0))
                     return [];
                 const uids: number[] = [];
                 let page = 1;

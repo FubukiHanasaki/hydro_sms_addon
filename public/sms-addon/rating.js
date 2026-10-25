@@ -212,19 +212,20 @@
         classes.value = data.classScope.selected;
         app.dataset.exportRating=JSON.stringify(Object.fromEntries(url.searchParams));
         boardStats = data.stats;
+        for (const id of ['sms-rating-query', 'sms-rating-grade', 'sms-rating-school']) { $(id).disabled = data.anonymous; if (data.anonymous) $(id).value = ''; }
         const rows = $('sms-rating-rows');
         rows.replaceChildren();
         for (const u of data.users) {
             const row = el('tr'), account = el('td'), link = el('a', '', u.username);
-            link.href = `/user/${u.uid}`;
-            account.append(link, el('div', 'sms-secondary', `UID ${u.uid}`));
+            if (data.anonymous) account.append(el('span', '', u.username));
+            else { link.href = `/user/${u.uid}`; account.append(link, el('div', 'sms-secondary', `UID ${u.uid}`)); }
             const rating = el('td'), tier = el('span', 'sms-rating-tier', u.title);
             tier.style.setProperty('--sms-tier-color', u.color);
             rating.append(el('strong', 'sms-rating-number', number(u.rating)), tier);
             const recent = el('td');
             recent.append(el('span', `sms-rating-delta ${u.recent.delta > 0 ? 'sms-rating-up' : u.recent.delta < 0 ? 'sms-rating-down' : ''}`, signed(u.recent.delta)), el('span', 'sms-secondary', u.recent.text));
             const action = el('td');
-            action.append(button('历史记录', () => history(u.uid, historyBase), 'link'));
+            if (!data.anonymous) action.append(button('历史记录', () => history(u.uid, historyBase), 'link')); else action.textContent = '—';
             row.append(el('td', '', u.rank ?? '—'), account, rating, recent, el('td', '', u.rated ? u.contests : '—'), action);
             rows.append(row);
         }

@@ -237,6 +237,23 @@ export class RatingService {
     }
     async summary(uid: number) { const h = await this.head(); const s = await this.summaries.findOne({ generation: h.generation, uid }); return this.present(s); }
     present(s: Summary | null) { const r = s?.rating ?? 0; return { rating: r, rated: !!s, contests: s?.contests ?? 0, peak: s?.peak ?? 0, records: s?.records ?? 0, updatedAt: s?.updatedAt ?? null, ...ratingTitle(r, !!s) }; }
+    async canIdentify(actor: number) {
+        if (!Number.isSafeInteger(actor) || actor <= 0) return false;
+        return !!(await this.students.students.findOne({ hydroUid: actor }, { projection: { _id: 1 } }) ||
+            await this.db.collection('sms_teachers').findOne({ hydroUid: actor }, { projection: { _id: 1 } }));
+    }
+    async visibleHistory(actor: number, uidValue: unknown, pageValue: unknown = 1) {
+        const uid = positiveInt(Number(uidValue), 'UID');
+        if (actor !== uid && !await this.canIdentify(actor)) throw new SmsError(403, '绑定 SMS 档案后可查看他人的 Rating 记录');
+        return this.history(uid, pageValue);
+    }
+    async publicBoard(domainId: string, query: unknown = '', pageValue: unknown = 1, mode: unknown = 'all', grade: unknown = '', school: unknown = '', actor = 0) {
+        const anonymous = !await this.canIdentify(actor);
+        // Anonymous account searches would act as an identity oracle. Ignore all
+        // identity predicates and number the full sorted board before pagination.
+        const board = await this.board(domainId, anonymous ? '' : query, pageValue, mode, anonymous ? '' : grade, anonymous ? '' : school, actor);
+        return { ...board, anonymous, users: board.users.map((u, i) => anonymous ? { ...u, uid: null, username: `选手${(board.page - 1) * board.pageSize + i + 1}` } : u) };
+    }
     async history(uidValue: unknown, pageValue: unknown = 1) {
         const uid = positiveInt(Number(uidValue), 'UID'), page = positiveInt(Number(pageValue), '页码');
         if (page > 100000)
