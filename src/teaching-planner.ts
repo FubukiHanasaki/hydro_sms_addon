@@ -1,3 +1,4 @@
+import type { ExamService } from './exams';
 import { readFilter } from './access';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { createHash, randomUUID } from 'node:crypto';
@@ -21,7 +22,7 @@ export interface Lesson { id: string; planId: string; domainId: string; original
 interface Adjustment { _id: string; domainId: string; lesson: Lesson; version: number }
 export interface Actual { _id: string; domainId: string; date: string; start: string; end: string; title: string; teacherUid: number; location: string; content: string; remark: string; examId: string; attendance: Row[]; lessonId?: string; planned?: Lesson; version: number; updatedBy: number; updatedAt: Date; requestHash?: string }
 export class TeachingPlanner {
- constructor(private db: Db, private students: StudentService, private org: OrganizationService) {}
+ constructor(private db: Db, private students: StudentService, private org: OrganizationService, private examCatalog?: ExamService) {}
  get plans() { return this.db.collection<Plan>('sms_teaching_plans'); }
  get records() { return this.db.collection<Actual>('sms_teaching_records'); }
  get adjustments() { return this.db.collection<Adjustment>('sms_teaching_adjustments'); }
@@ -148,7 +149,7 @@ export class TeachingPlanner {
    const external=await this.students.authorization.can(actor,'courses.roster',[domainId]);if(external){const policy=await this.students.studentPolicy(actor),filter=readFilter(policy,actor);const extra=await this.students.students.find(filter,{projection:{hydroUid:1}}).toArray();extra.forEach(s=>{if(s.hydroUid)allowed.add(s.hydroUid);});}
    const seen=new Set<number>(),attendance=b.attendance.map(v=>{const a=object(v);this.org.fields(a,['uid','status','remark']);const uid=positiveInt(a.uid);if(seen.has(uid)||!allowed.has(uid))fail('名单重复或学生不属于本班');seen.add(uid);const status=text(a.status,10,'考勤');if(!ATTENDANCE.includes(status))fail('考勤状态无效');return {uid,status,remark:text(a.remark??'',500,'考勤备注')};});
    if(old?.attendance.some(a=>a.status&&!seen.has(a.uid)))fail('不能遗漏已有考勤记录');
-   const examId=text(b.examId??'',24,'模拟赛');if(examId&&(!ObjectId.isValid(examId)||!await this.db.collection('document').findOne({domainId,docType:30,docId:new ObjectId(examId)})))fail('关联模拟赛不属于当前班级');
+   const examId=text(b.examId??'',24,'模拟赛');if(examId){if(!ObjectId.isValid(examId))fail('模拟赛 ID 无效');const associated=this.examCatalog&&await this.examCatalog.exams.findOne({contestId:examId,classIds:domainId,archived:false});if(associated)await this.examCatalog!.model(actor,associated.domainId,examId);else if(!await this.db.collection('document').findOne({domainId,docType:30,docId:new ObjectId(examId)}))fail('关联模拟赛不属于当前班级');}
    const row: Actual={_id:id,domainId,date:dateValue,start,end,title,teacherUid,location:text(b.location??'',160,'地点'),content:text(b.content??'',10000,'教学内容'),remark:text(b.remark??'',2000,'课程备注'),examId,attendance,...lesson?{lessonId,planned:old?.planned??lesson}:{},version:(old?.version??0)+1,updatedAt:new Date(),updatedBy:actor,requestHash:digest(b)};
    await verify();await this.students.requireAction(actor,old?'courses.update':'courses.create',[domainId]);await this.students.mutation(actor,'courses.record',id,['date','title','teacherUid','content','attendance','examId'],async()=>{if(old){const r=await this.records.replaceOne({_id:id,version:old.version},row);if(!r.matchedCount)fail('课程已更新',409);}else await this.records.insertOne(row);});
    return {saved:true,id,version:row.version};

@@ -391,3 +391,25 @@
 #sms-org-domain-panel .star-form { margin-right: 8px; }
 #sms-org-domain-panel .sms-domain-star { cursor: pointer; border: 0; background: transparent; padding: 4px; color: #8593a3; }
 #sms-org-domain-panel .sms-domain-star.activated { color: #f3b52c; }
+
+.sms-exam-dialog { width: min(1060px,calc(100vw - 32px)); max-width: 1060px; max-height: 90vh; border: 0; border-radius: 5px; padding: 0; color: #34495e; }
+.sms-exam-dialog::backdrop { background: rgba(30,40,50,.48); }
+.sms-exam-dialog > form { display: flex; flex-direction: column; max-height: 90vh; margin: 0; }
+.sms-exam-dialog .section__header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; flex-shrink: 0; }
+.sms-exam-dialog .section__title { margin: 0; }
+.sms-exam-dialog-body { overflow: auto; min-height: 0; padding: 20px 22px; }
+.sms-exam-dialog .sms-dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin: 0; flex-shrink: 0; border-top: 1px solid #e4e9ef; }
+.sms-exam-dialog .sms-field { max-width: none; min-width: 0; }
+.sms-exam-dialog .textbox,.sms-exam-dialog .select { width: 100%; box-sizing: border-box; margin: 5px 0 16px; }
+.sms-exam-dialog select[multiple] { min-height: 130px; }
+.sms-exam-preview { max-height: 340px; overflow: auto; margin: 14px 0; border: 1px solid #e4e9ef; border-radius: 4px; }
+.sms-exam-preview table { min-width: 640px; width: 100%; }
+.sms-exam-preview th { position: sticky; top: 0; background: #f6f8fa; z-index: 1; }
+.sms-exam-consent { display: flex; align-items: flex-start; gap: 8px; line-height: 1.6; margin-top: 16px; }
+.sms-exam-consent input { margin-top: 5px; flex-shrink: 0; }
+.sms-exam-facts { display: flex; gap: 10px 26px; flex-wrap: wrap; line-height: 1.8; }
+.sms-exam-remark { white-space: pre-wrap; overflow-wrap: anywhere; margin: 16px 0 0; }
+.sms-exam-native .section__header { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.sms-exam-native .section__tools { position: static; transform: none; float: none; display: flex; gap: 8px; flex-wrap: wrap; }
+.sms-exam-table { min-width: 760px; }
+@media (max-width:767px) { .sms-exam-dialog { width: calc(100vw - 16px); } .sms-exam-dialog .sms-form-grid { grid-template-columns: minmax(0,1fr); } .sms-exam-dialog .sms-dialog-footer { flex-wrap: wrap; } }

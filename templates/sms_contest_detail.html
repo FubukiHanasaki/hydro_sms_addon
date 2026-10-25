@@ -1,0 +1,10 @@
+{% extends "contest_detail.html" %}
+{% block content %}
+<link rel="stylesheet" href="/sms-addon/panel.css?v=exams-20261025">
+<div class="row"><div class="columns"><section class="section sms-exam-native" id="sms-exam-native" data-api="{{ smsExamsApi }}" data-domain="{{ smsExam.domainId }}" data-contest="{{ smsExam.contestId }}">
+  <div class="section__header"><h2 class="section__title">{{ smsExam.examType or '模拟赛' }}</h2><div class="section__tools">{% if smsExam.canEdit %}<button class="rounded button" type="button" data-exam-edit>比赛信息</button>{% endif %}{% if smsExam.canUpload %}<a class="primary rounded button" href="{{ smsExam.uploadUrl }}">打包提交代码</a>{% endif %}{% if smsExam.canReview and Date.now() >= smsExam.endAt.getTime() %}<button class="rounded button" type="button" data-exam-review>核验 Rating</button>{% endif %}</div></div>
+  <div class="section__body"><div class="sms-exam-facts"><span>难度 <strong>{{ smsExam.difficulty }}</strong></span><span>{{ 'Rated' if smsExam.rated else 'Unrated' }}</span><span>满分 {{ smsExam.fullScore }}</span><span>时长 {{ smsExam.durationMinutes }} 分钟</span><span>{% if smsExam.reviewPending %}待核验{% elif smsExam.settled %}已结算{% else %}未结算{% endif %}</span>{% if smsExam.scope %}<span>范围 {{ smsExam.scope }}</span>{% endif %}{% if smsExam.source %}<span>来源 {{ smsExam.source }}</span>{% endif %}</div>{% if smsExam.remark %}<p class="sms-exam-remark">{{ smsExam.remark }}</p>{% endif %}{% if Date.now() >= smsExam.endAt.getTime() %}<p class="help-text">赛后提交为订正，不计正式成绩、排名和 Rating。</p>{% endif %}<div id="sms-exam-native-error" role="alert"></div></div>
+</section></div></div>
+{{ super() }}
+<script src="/sms-addon/exams.js?v=exams-20261025" defer></script>
+{% endblock %}

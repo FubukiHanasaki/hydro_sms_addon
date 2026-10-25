@@ -9,12 +9,13 @@ export const MODULES = {
  teachers: ['教师档案',{read:'查看基本资料',sensitive:'查看联系资料',create:'创建',update:'修改'}],
  schedules: ['排课管理',{read:'查看',create:'创建计划',update:'修改计划',adjust:'调课停课与补课',batch:'批量排课',export:'导出'}],
  courses: ['课程与考勤',{read:'查看',create:'登记课程',update:'修改课程与考勤',link:'关联已有课程',roster:'补充班外学生',export:'导出'}],
+ exams: ['模拟赛管理',{read:'查看',create:'关联比赛',update:'修改比赛信息',archive:'归档',submit:'打包提交代码',review:'核验 Rating（限插件管理员）',export:'导出'}],
  reports: ['教务报表',{read:'查看',export:'导出'}],
  accounts: ['账户管理',{read:'查看',create:'创建账号',rename:'修改用户名',password:'重置密码',status:'启停账号',provision:'批量补建账号',export:'导出'}],
  rating: ['Rating 管理',{configure:'比赛设置',import:'导入历史',recalculate:'重新结算'}],
  audit: ['操作记录',{read:'查看',export:'导出'}],
 } as const;
-export const GLOBAL_ONLY = new Set(['classes.create','schedules.batch','students.create','students.import','students.promote',...Object.keys(MODULES.teachers[1]).map(k=>`teachers.${k}`),...Object.keys(MODULES.accounts[1]).map(k=>`accounts.${k}`),...Object.keys(MODULES.rating[1]).map(k=>`rating.${k}`),...Object.keys(MODULES.audit[1]).map(k=>`audit.${k}`)]);
+export const GLOBAL_ONLY = new Set(['exams.review','classes.create','schedules.batch','students.create','students.import','students.promote',...Object.keys(MODULES.teachers[1]).map(k=>`teachers.${k}`),...Object.keys(MODULES.accounts[1]).map(k=>`accounts.${k}`),...Object.keys(MODULES.rating[1]).map(k=>`rating.${k}`),...Object.keys(MODULES.audit[1]).map(k=>`audit.${k}`)]);
 export const CODES = Object.entries(MODULES).flatMap(([m,[,actions]])=>Object.keys(actions).map(a=>`${m}.${a}`));
 type Scope = 'all' | 'teaching' | 'member';
 interface Template { id:string;name:string;rules:Record<string,Scope>;builtin?:boolean }
@@ -24,10 +25,10 @@ interface Config { _id:string;revision:number;templates:Template[];bindings:Bind
 const rules=(codes:string[],scope:Scope='all')=>Object.fromEntries(codes.map(c=>[c,scope]));
 export const BUILTINS:Template[] = [
  {id:'legacy',name:'现有身份权限',builtin:true,rules:{}},
- {id:'office',name:'教务',builtin:true,rules:rules(CODES.filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')&&!c.startsWith('rating.')&&c!=='students.promote'))},
- {id:'teaching',name:'任课教师',builtin:true,rules:rules(['students.read','students.export','classes.read','classes.export','schedules.read','schedules.export','courses.read','courses.create','courses.update','courses.link','reports.read'],'teaching')},
+ {id:'office',name:'教务',builtin:true,rules:rules(CODES.filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')&&!c.startsWith('rating.')&&c!=='students.promote'&&c!=='exams.review'))},
+ {id:'teaching',name:'任课教师',builtin:true,rules:rules(['students.read','students.export','classes.read','classes.export','schedules.read','schedules.export','courses.read','courses.create','courses.update','courses.link','reports.read','exams.read','exams.create','exams.update','exams.archive','exams.submit','exams.export'],'teaching')},
  {id:'readonly',name:'只读教务',builtin:true,rules:rules(CODES.filter(c=>c.endsWith('.read')||c.endsWith('.export')).filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')))},
- {id:'self',name:'学生本人',builtin:true,rules:rules(['classes.read','schedules.read','courses.read'],'member')},
+ {id:'self',name:'学生本人',builtin:true,rules:rules(['classes.read','schedules.read','courses.read','exams.read'],'member')},
  {id:'none',name:'无业务默认权限',builtin:true,rules:{}},
 ];
 export class AuthorizationService {
@@ -52,8 +53,8 @@ export class AuthorizationService {
   const c=config??await this.config(),binding=c.bindings.find(b=>b.uid===uid),template=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
   let base=template?.rules[code];
   if(template?.id==='legacy'){
-   if(['classes.read','schedules.read','courses.read','classes.export','schedules.export','courses.export','reports.export'].includes(code))base='member';
-   if(['courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
+   if(['exams.read','classes.read','schedules.read','courses.read','classes.export','schedules.export','courses.export','reports.export'].includes(code))base='member';
+   if(['exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
   }
   if(base==='all')return null;
   const ids=new Set<string>(base==='teaching'?await this.teaching(uid):base==='member'?await this.members(uid):[]),now=Date.now();

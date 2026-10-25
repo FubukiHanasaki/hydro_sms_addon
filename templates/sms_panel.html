@@ -1,7 +1,7 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=20261023-domain-tab-align">
-<div id="sms-app" class="sms-shell row" data-home-domains="{{ url('home_domain') }}" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
+<link rel="stylesheet" href="/sms-addon/panel.css?v=exams-20261025">
+<div id="sms-app" class="sms-shell row" data-exams="{{ smsExams }}" data-home-domains="{{ url('home_domain') }}" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
     <section id="sms-students-section" class="section visible">
@@ -37,6 +37,12 @@
       <div class="section__body sms-pagination"><span id="sms-class-page" class="help-text"></span><div><button type="button" id="sms-class-prev" class="rounded button">上一页</button><button type="button" id="sms-class-next" class="rounded button">下一页</button></div></div>
       </div>
       <div id="sms-org-domain-panel" role="tabpanel" aria-labelledby="sms-org-tab-domains" class="section__body no-padding" hidden></div>
+    </section>
+    <section id="sms-exams-section" class="section visible" hidden>
+      <div class="section__header"><h1 class="section__title">模拟赛管理</h1><div class="section__tools" id="sms-exam-tools"></div></div>
+      <div class="section__body"><form id="sms-exam-search" class="sms-org-toolbar"><input id="sms-exam-query" class="textbox" type="search" placeholder="比赛名称、类型" aria-label="搜索模拟赛"><select id="sms-exam-class" class="select" aria-label="参赛班级"><option value="">全部班级</option></select><select id="sms-exam-archived" class="select" aria-label="归档状态"><option value="false">进行管理</option><option value="true">已归档</option></select><button class="rounded button" type="submit">查询</button></form><p id="sms-exam-summary" class="help-text"></p><div id="sms-exam-setup"></div></div>
+      <div class="section__body no-padding sms-table-scroll"><table class="sms-bulk-table sms-exam-table"><thead><tr><th>模拟赛</th><th>班级 / 赛制</th><th>难度 / Rated</th><th>时间 / 结算</th><th>操作</th></tr></thead><tbody id="sms-exam-rows"></tbody></table></div>
+      <div class="section__body sms-pagination"><span id="sms-exam-page"></span><div><button class="rounded button" type="button" id="sms-exam-prev">上一页</button><button class="rounded button" type="button" id="sms-exam-next">下一页</button></div></div>
     </section>
     <section id="sms-accounts-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">账户管理</h1><div class="section__tools"><span data-sms-export="accounts">导出账户</span><button type="button" class="rounded button sms-bulk-admin" data-bulk="provision" hidden>批量补建账号</button><button type="button" class="link sms-bulk-admin" data-bulk="history" hidden>批量记录</button><button type="button" id="sms-account-create" class="primary rounded button">＋ 创建账号</button></div></div>
@@ -80,6 +86,7 @@
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="courses"><span class="icon icon-book"></span> 课程管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="schedules"><span class="icon icon-schedule"></span> 排课管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="organization"><span class="icon icon-web" aria-hidden="true"></span> 班级与子域</button></li>
+      <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="exams"><span class="icon icon-award" aria-hidden="true"></span> 模拟赛管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="accounts" id="sms-accounts-nav" hidden><span class="icon icon-account--circle" aria-hidden="true"></span> 账户管理</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="permissions" id="sms-permissions-nav" hidden><span class="icon icon-wrench"></span> 访问授权</button></li>
       <li class="menu__item"><button type="button" class="menu__link sms-nav" data-tab="audit" id="sms-audit-nav" hidden><span class="icon icon-schedule"></span> 操作记录</button></li>
@@ -102,11 +109,12 @@
   </dialog>
 </div>
 <script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
-<script src="/sms-addon/panel.js?build=academic-auth-20261021" defer></script>
+<script src="/sms-addon/panel.js?build=exams-20261025" defer></script>
+<script src="/sms-addon/exams.js?v=exams-20261025" defer></script>
 <script src="/sms-addon/organization.js?v=20261023-domain-tab" defer></script>
 <script src="/sms-addon/accounts.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">
-<script src="/sms-addon/rating.js?build=rating-privacy-20261025" defer></script>
+<script src="/sms-addon/rating.js?build=exams-review-20261025" defer></script>
 <link rel="stylesheet" href="/sms-addon/teaching.css?build=overview-export-20261022">
 <script src="/sms-addon/schedule-layout.js?build=timeline-teachers-20261021" defer></script>
 <script src="/sms-addon/teaching.js?build=overview-export-20261022" defer></script>

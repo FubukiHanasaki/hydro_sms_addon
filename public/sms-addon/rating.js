@@ -327,7 +327,7 @@
             enable.type = 'checkbox';
             enable.checked = c.enabled;
             enable.setAttribute('aria-label', `${c.title} 计入 Rating`);
-            const state = el('td', '', c.error || (!c.enabled ? '未计入' : +new Date(c.endAt) > Date.now() ? '未结束' : c.settled ? `已结算 · ${c.participants} 人` : '待结算'));
+            const state = el('td', '', c.error || (c.reviewPending ? '待管理员核验' : !c.enabled ? '未计入' : +new Date(c.endAt) > Date.now() ? '未结束' : c.settled ? `已结算 · ${c.participants} 人` : '待管理员核验'));
             if (c.error)
                 state.className = 'sms-rating-error';
             const diffCell = el('td'), enableCell = el('td'), actions = el('td');
@@ -342,7 +342,7 @@
             r.append(c);
             t.body.append(r);
         } }
-        view.left.append(button('重新结算', async () => { view.error.textContent = ''; await api(app.dataset.ratingContests.replace(/\/contests$/, '/recalculate'), {}); await load(); await board(); }));
+        view.left.append(button('重算已核验结果', async () => { view.error.textContent = ''; await api(app.dataset.ratingContests.replace(/\/contests$/, '/recalculate'), {}); await load(); await board(); }));
         await load();
     }
     $('sms-rating-stats').addEventListener('click', () => { if (!boardStats)

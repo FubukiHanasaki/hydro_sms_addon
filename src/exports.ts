@@ -1,3 +1,4 @@
+import type { ExamService } from './exams';
 import { AcademicService } from './academic';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import * as XLSX from 'xlsx';
@@ -32,9 +33,10 @@ export async function collectExport<T>(read:(page:number)=>Promise<{total:number
  return rows;
 }
 export class ExportService {
- constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService,private rating:RatingService,private accounts:AccountManagement,private bulk:BulkService,private imports:StudentImportService,private batches?:ScheduleBatchService,private academic?:AcademicService){}
+ constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService,private rating:RatingService,private accounts:AccountManagement,private bulk:BulkService,private imports:StudentImportService,private batches?:ScheduleBatchService,private academic?:AcademicService,private exams?:ExamService){}
  async build(actor:number,kind:string,q:Record<string,unknown>,domain='system'):Promise<ExportTable>{
   const all=collectExport;
+  if(kind==='exams'){if(!this.exams)throw new SmsError(503,'模拟赛服务不可用');return this.exams.export(actor,q);}
   if(kind==='academic-daily'||kind==='academic-actual'){
    if(!this.academic)throw new SmsError(400,'教务报表不可用');const d=await this.academic.board(actor,q);if(!d.canExport)throw new SmsError(403,'没有教务报表导出权限');
    return kind==='academic-daily'?{name:'教务每日统计',headers:['日期','有效计划','停课','补课','实际课程','独立课程','学生人数（每日去重）','参与人次','到课','迟到','请假','旷课','考勤未填'],rows:d.daily.map(r=>[r.date,r.planned,r.cancelled,r.makeup,r.actual,r.independent,r.uniqueStudents,r.participants,r.present,r.late,r.leave,r.absent,r.missing])}:{name:'教务实际课程',headers:['课程 ID','日期','开始时间','结束时间','班级','教师','课程','关联课次','来源','参与人数','到课','迟到','请假','旷课','考勤未填'],rows:d.actual.map(r=>[r.id,r.date,r.start,r.end,r.className,r.teacherName,r.title,r.lessonId,r.source==='linked'?'来自排课':'独立课程',r.attendance.participants,r.attendance.present,r.attendance.late,r.attendance.leave,r.attendance.absent,r.attendance.missing])};

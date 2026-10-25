@@ -16,8 +16,8 @@ export function hydroContestGateway(ctx: Context): ContestGateway {
                 return null;
             if (new Date(tdoc.endAt).getTime() > Date.now())
                 return null;
-            if (await ctx.db.db.collection('record').findOne({ domainId, contest: tid, status: { $in: [0, 20, 21, 22] } }))
-                throw new SmsError(409, '比赛仍有待评测提交');
+            if (await ctx.db.db.collection('record').findOne({ domainId, contest: tid, status: { $in: [0, 8, 9, 20, 21, 22] } }))
+                throw new SmsError(409, '比赛仍有待评测或需要重测的正式提交');
             const rule = ContestModel.RULES[tdoc.rule];
             if (!rule || !['oi', 'ioi', 'strictioi', 'acm'].includes(tdoc.rule))
                 throw new SmsError(400, '此赛制暂不支持 Rating');
@@ -25,7 +25,8 @@ export function hydroContestGateway(ctx: Context): ContestGateway {
             // accounts and attendees with no submissions, as absent scores in sms_system.
             const cursor = ContestModel.getMultiStatus(domainId, { docId: tid, journal: { $exists: true, $ne: [] }, unrank: { $ne: true }, uid: { $gt: 0 } }).sort(rule.statusSort);
             const ranked = await rule.ranked(tdoc, cursor);
-            const fullScore = tdoc.pids.reduce((total: number, pid: number) => total + (tdoc.score?.[pid] || 100), 0);
+            const fullScore = tdoc.pids.reduce((total: number, pid: number) => total + (tdoc.score?.[pid] ?? 100), 0);
+            if (tdoc.rule !== 'acm' && !(fullScore > 0)) throw new SmsError(400, '比赛题目满分配置无效');
             const participants = ranked.map(([rank, s]: [
                 number,
                 any

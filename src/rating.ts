@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { RatingEngine, legacySmsRatingEngine } from './rating-engine';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { Db } from 'mongodb';
 import { StudentService } from './service';
 import { SmsError } from './types';
@@ -19,6 +19,7 @@ export interface RatingSource {
     difficulty?: Difficulty;
     penalty?: boolean;
     participants?: Participant[];
+    review?: { id: string; by: number; at: string; hash: string; configVersion: number; resultVersion?: number };
 }
 interface Head {
     _id: string;
@@ -188,7 +189,7 @@ export class RatingService {
             error?: string;
         }>('sms_rating_contests').find({}).toArray();
         const sources = await this.sources.find({ generation: head.generation, kind: 'contest' }).toArray();
-        return { revision: head.revision, difficulties: DIFFICULTIES, bands: BANDS, contests: contests.map(c => { const key = `${c.domainId}:${c.docId}`, config = configs.find(k => k._id === key), source = sources.find(s => s.key === `contest:${key}`); return { id: String(c.docId), domainId: c.domainId, title: c.title, endAt: c.endAt, rule: c.rule, enabled: config?.enabled ?? false, difficulty: config?.difficulty ?? 'CSP-J', settled: !!source, participants: source?.participants?.length ?? 0, error: config?.error ?? '' }; }) };
+        return { revision: head.revision, difficulties: DIFFICULTIES, bands: BANDS, contests: contests.map(c => { const key = `${c.domainId}:${c.docId}`, config = configs.find(k => k._id === key), source = sources.find(s => s.key === `contest:${key}`); return { id: String(c.docId), domainId: c.domainId, title: c.title, endAt: c.endAt, rule: c.rule, enabled: config?.enabled ?? false, difficulty: config?.difficulty ?? 'CSP-J', settled: !!source, reviewPending: !!config && (!!config.enabled !== !!source || (!!source && ((source.review?.configVersion ?? 0) !== ((config as any).version ?? 0) || (source.review?.resultVersion ?? 0) !== ((config as any).resultVersion ?? 0)))), participants: source?.participants?.length ?? 0, error: config?.error ?? '' }; }) };
     }
     async configure(actor: number, input: unknown) {
         await this.students.requireAction(actor,'rating.configure');
@@ -200,40 +201,73 @@ export class RatingService {
             throw new SmsError(404, '比赛不存在');
         if (!['oi', 'ioi', 'acm', 'strictioi'].includes(doc.rule))
             throw new SmsError(400, '此赛制暂不支持 Rating');
-        await this.students.mutation(actor, 'rating.configure', `${domainId}:${contestId}`, ['difficulty', 'enabled'], async () => this.db.collection<{
-            _id: string;
-        }>('sms_rating_contests').updateOne({ _id: `${domainId}:${contestId}` }, { $set: { domainId, contestId, difficulty: b.difficulty, enabled: b.enabled, updatedBy: actor, updatedAt: new Date() } }, { upsert: true }));
-        await this.sync(actor);
-        return { saved: true };
+        return this.configureRequest(actor, domainId, contestId, b.difficulty as Difficulty, b.enabled);
+    }
+    async configureRequest(actor: number, domainId: string, contestId: string, difficulty: Difficulty, enabled: boolean) {
+        const exam = await this.db.collection('sms_exams').findOne({ _id: `${domainId}:${contestId}` as any });
+        if (!await this.students.authorization.can(actor, 'rating.configure')) {
+            if (!exam) throw new SmsError(403, '没有比赛设置权限');
+            await this.students.requireAction(actor, 'exams.update', exam.classIds);
+        }
+        if (!DIFFICULTIES.includes(difficulty) || typeof enabled !== 'boolean') throw new SmsError(400, '比赛设置无效');
+        // Serializes config writes with review publication.
+        return this.mutate(actor, 'rating.configure', async old => {
+            if (!await this.students.authorization.can(actor, 'rating.configure')) { const current = await this.db.collection('sms_exams').findOne({ _id: `${domainId}:${contestId}` as any }); if (!current) throw new SmsError(403, '没有比赛设置权限'); await this.students.requireAction(actor, 'exams.update', current.classIds); }
+            const coll = this.db.collection('sms_rating_contests');
+            const prior = await coll.findOne({ _id: `${domainId}:${contestId}` as any });
+            if (prior?.difficulty === difficulty && prior?.enabled === enabled) return old;
+            await this.students.mutation(actor, 'rating.configure', `${domainId}:${contestId}`, ['difficulty', 'enabled'], async () => coll.updateOne({ _id: `${domainId}:${contestId}` as any }, { $set: { domainId, contestId, difficulty, enabled, updatedBy: actor, updatedAt: new Date() }, $inc: { version: 1 }, $unset: { error: '' } }, { upsert: true }));
+            return old;
+        });
+    }
+    async reviewPreview(actor: number, domainId: string, contestId: string) {
+        if (!/^[a-f\d]{24}$/i.test(contestId)) throw new SmsError(400, '比赛 ID 无效');
+        await this.students.authorization.requireAdmin(actor);
+        const config = await this.db.collection('sms_rating_contests').findOne({ _id: `${domainId}:${contestId}` as any });
+        if (!config) throw new SmsError(404, '请先设置比赛难度与 Rated 状态');
+        const doc = await this.db.collection('document').findOne({ domainId, docType: 30, docId: (await import('mongodb')).ObjectId.createFromHexString(contestId) });
+        if (!doc || !doc.endAt || +new Date(doc.endAt) > Date.now()) throw new SmsError(409, '比赛结束后才能核验');
+        if (!this.gateway) throw new SmsError(503, '比赛数据适配器不可用');
+        const snapshot = await this.gateway.snapshot(domainId, contestId, config.difficulty);
+        if (!snapshot) throw new SmsError(409, '比赛结果尚未就绪');
+        const head = await this.head(); const id = randomUUID();
+        const hash = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+        await this.db.collection('sms_rating_reviews').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+        await this.db.collection('sms_rating_reviews').insertOne({ _id: id as any, actor, domainId, contestId, version: config.version ?? 0, revision: head.revision, enabled: config.enabled, resultVersion: config.resultVersion ?? 0, hash, state: 'preview', expiresAt: new Date(Date.now() + 900000) });
+        return { id, revision: head.revision, enabled: config.enabled, title: snapshot.title, difficulty: snapshot.difficulty, at: snapshot.at, participants: snapshot.participants ?? [], expiresIn: 900 };
+    }
+    async reviewConfirm(actor: number, reviewId: string) {
+        await this.students.authorization.requireAdmin(actor);
+        const reviews = this.db.collection('sms_rating_reviews');
+        const preview = await reviews.findOne({ _id: reviewId as any, actor });
+        if (!preview || preview.state !== 'preview' || preview.expiresAt <= new Date()) throw new SmsError(409, '核验预览已失效，请重新核验');
+        const claimed = await reviews.updateOne({ _id: reviewId as any, actor, state: 'preview', expiresAt: { $gt: new Date() } }, { $set: { state: 'confirming' } });
+        if (!claimed.modifiedCount) throw new SmsError(409, '核验正在执行或已完成');
+        try {
+        const result = await this.mutate(actor, 'rating.review', async old => {
+            await this.students.authorization.requireAdmin(actor);
+            const config = await this.db.collection('sms_rating_contests').findOne({ _id: `${preview.domainId}:${preview.contestId}` as any });
+            if (!config || (config.version ?? 0) !== preview.version || config.enabled !== preview.enabled || (config.resultVersion ?? 0) !== (preview.resultVersion ?? 0)) throw new SmsError(409, '比赛设置已变化，请重新核验');
+            const fresh = await this.gateway!.snapshot(preview.domainId, preview.contestId, config.difficulty);
+            const hash = createHash('sha256').update(JSON.stringify(fresh)).digest('hex');
+            if (!fresh || hash !== preview.hash) throw new SmsError(409, '正式成绩已变化，请重新核验');
+            const rest = old.filter(s => s.key !== fresh.key);
+            if (config.enabled) rest.push({ ...fresh, review: { id: reviewId, by: actor, at: new Date().toISOString(), hash, configVersion: preview.version, resultVersion: preview.resultVersion ?? 0 } });
+            return rest.sort((a, b) => a.key.localeCompare(b.key));
+        }, preview.revision);
+        await reviews.updateOne({ _id: reviewId as any }, { $set: { state: 'complete', completedAt: new Date() } });
+        await this.db.collection('sms_rating_contests').updateOne({ _id: `${preview.domainId}:${preview.contestId}` as any }, { $unset: { error: '' } });
+        await this.students.audit(actor, 'rating.review', `${preview.domainId}:${preview.contestId}`, ['review:'+reviewId, 'enabled:'+preview.enabled]);
+        return { ...result, approved: true };
+        } catch (error) { await reviews.updateOne({ _id: reviewId as any, state: 'confirming' }, { $set: { state: 'preview' } }); throw error; }
     }
     async sync(actor = 0) {
-        if (!this.gateway)
-            return;
-        const configs = await this.db.collection<{
-            _id: string;
-            domainId: string;
-            contestId: string;
-            difficulty: Difficulty;
-            enabled: boolean;
-        }>('sms_rating_contests').find({}).sort({ _id: 1 }).toArray();
-        if (!configs.length)
-            return;
-        const snapshots: RatingSource[] = [];
-        for (const c of configs) {
-            if (!c.enabled)
-                continue;
-            try {
-                const s = await this.gateway.snapshot(c.domainId, c.contestId, c.difficulty);
-                if (s)
-                    snapshots.push(s);
-                await this.db.collection('sms_rating_contests').updateOne({ _id: c._id as any }, { $unset: { error: '' } });
-            }
-            catch (e) {
-                await this.db.collection('sms_rating_contests').updateOne({ _id: c._id as any }, { $set: { error: e instanceof Error ? e.message : '比赛读取失败' } });
-                throw e;
-            }
-        }
-        await this.mutate(actor, 'rating.recalculate', async (old) => [...old.filter(s => s.kind === 'import'), ...snapshots].sort((a, b) => a.key.localeCompare(b.key)));
+        // Published contest snapshots are immutable until an administrator
+        // explicitly reviews a fresh result. Timers/rejudges/corrections cannot
+        // silently add, remove or rewrite reviewed or historical Rating sources.
+        if (!this.gateway) return;
+        const h = await this.head();
+        if (h.engine !== this.engine.id) await this.mutate(actor, 'rating.recalculate', async old => old);
     }
     async summary(uid: number) { const h = await this.head(); const s = await this.summaries.findOne({ generation: h.generation, uid }); return this.present(s); }
     present(s: Summary | null) { const r = s?.rating ?? 0; return { rating: r, rated: !!s, contests: s?.contests ?? 0, peak: s?.peak ?? 0, records: s?.records ?? 0, updatedAt: s?.updatedAt ?? null, ...ratingTitle(r, !!s) }; }

@@ -1,3 +1,5 @@
+import { ExamService } from './src/exams';
+import { examHost, installExams } from './src/exam-hydro';
 import { MemberImportService } from './src/member-import';
 import { AcademicService } from './src/academic';
 import { ScheduleBatchService } from './src/schedule-batch';
@@ -45,15 +47,18 @@ export async function apply(ctx: Context) {
   disableNativeDomainManagement(ctx);
   const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
   await rating.init();
+  const exams = new ExamService(ctx.db.db, service, organization, rating, examHost());
+  await exams.init();
+  installExams(ctx, exams);
   const studentImport = new StudentImportService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)), rating);
   await studentImport.init();
   installRating(ctx, rating, organization);
-  const teaching = new TeachingService(ctx.db.db, service, organization, rating);
+  const teaching = new TeachingService(ctx.db.db, service, organization, rating, exams);
   await teaching.init();
   const academic = new AcademicService(ctx.db.db,service,organization,teaching);
   const scheduleBatches = new ScheduleBatchService(ctx.db.db, service, organization, teaching);
   await scheduleBatches.init();
-  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport, scheduleBatches, academic);
+  const exports = new ExportService(ctx.db.db, service, organization, teaching, rating, accounts, bulk, studentImport, scheduleBatches, academic, exams);
   UserModel._deleteUserCache(true, true);
 
   function privateResponse(handler: Handler) {
@@ -65,7 +70,7 @@ export async function apply(ctx: Context) {
       this.checkPriv(PRIV.PRIV_USER_PROFILE);
       privateResponse(this);
       this.response.template = 'sms_panel.html';
-      this.response.body = { smsApi: this.url('sms_api_students'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts'), smsRating: this.url('sms_api_rating_board'), smsRatingHistory: this.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, ''), smsRatingImport: this.url('sms_api_rating_import'), smsRatingContests: this.url('sms_api_rating_contests') };
+      this.response.body = { smsApi: this.url('sms_api_students'), smsExams: this.url('sms_api_exams'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts'), smsRating: this.url('sms_api_rating_board'), smsRatingHistory: this.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, ''), smsRatingImport: this.url('sms_api_rating_import'), smsRatingContests: this.url('sms_api_rating_contests') };
     }
   }
   class SmsApiHandler extends Handler {
@@ -149,6 +154,21 @@ export async function apply(ctx: Context) {
     async get() { await this.run(() => service.filterOptions(this.user._id)); }
   }
 
+  class SmsExamsHandler extends SmsApiHandler {
+    async get(){await this.run(()=>exams.list(this.user._id,this.context.query));}
+    async post(){await this.run(()=>exams.save(this.user._id,this.body()));}
+  }
+  class SmsExamCandidatesHandler extends SmsApiHandler {async get(){await this.run(()=>exams.candidates(this.user._id,this.context.query.domainId));}}
+  class SmsExamDetailHandler extends SmsApiHandler {async get(){await this.run(()=>exams.detail(this.user._id,this.context.params.domain,this.context.params.id));}async post(){await this.run(()=>exams.archive(this.user._id,this.context.params.domain,this.context.params.id,this.body()));}}
+  class SmsExamReviewHandler extends SmsApiHandler {async post(){await this.run(async()=>{await exams.model(this.user._id,this.context.params.domain,this.context.params.id);return rating.reviewPreview(this.user._id,this.context.params.domain,this.context.params.id);});}}
+  class SmsExamReviewConfirmHandler extends SmsApiHandler {async post(){await this.run(async()=>{const p=await ctx.db.db.collection('sms_rating_reviews').findOne({_id:this.context.params.review as any,actor:this.user._id});if(!p)throw new SmsError(404,'核验预览不存在');await exams.model(this.user._id,p.domainId,p.contestId);return rating.reviewConfirm(this.user._id,this.context.params.review);});}}
+  class SmsExamInitializeHandler extends SmsApiHandler {async get(){await this.run(()=>exams.initializationPreview(this.user._id));}async post(){await this.run(()=>exams.initializationConfirm(this.user._id,this.body()));}}
+  ctx.Route('sms_api_exams','/sms/api/exams',SmsExamsHandler);
+  ctx.Route('sms_api_exam_candidates','/sms/api/exams/candidates',SmsExamCandidatesHandler);
+  ctx.Route('sms_api_exam_initialize','/sms/api/exams/initialize',SmsExamInitializeHandler);
+  ctx.Route('sms_api_exam_review_confirm','/sms/api/exams/reviews/:review',SmsExamReviewConfirmHandler);
+  ctx.Route('sms_api_exam_detail','/sms/api/exams/:domain/:id',SmsExamDetailHandler);
+  ctx.Route('sms_api_exam_review','/sms/api/exams/:domain/:id/review',SmsExamReviewHandler);
   class SmsRatingBoardHandler extends SmsApiHandler {
     async get() { this.checkPerm(PERM.PERM_VIEW_RANKING); await this.run(async () => { const scope = await organization.ratingScope(this.user._id, this.domain._id, this.context.query.classId); return { ...await rating.publicBoard(scope.domainId, this.context.query.q, this.context.query.page ?? 1, this.context.query.mode ?? 'all', this.context.query.grade, this.context.query.school, this.user._id), classScope: scope }; }); }
   }

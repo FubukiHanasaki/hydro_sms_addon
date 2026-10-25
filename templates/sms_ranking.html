@@ -11,5 +11,5 @@
   <div class="section__body sms-pagination"><span>第 {{ smsBoard.page }} / {{ Math.max(1, Math.ceil(smsBoard.total / smsBoard.pageSize)) }} 页 · 共 {{ smsBoard.total }} 人</span><div>{% if smsBoard.page > 1 %}<a class="rounded button" href="?page={{ smsBoard.page - 1 }}&mode={{ smsBoard.mode }}&classId={{ smsClassScope.selected|urlencode }}&q={{ handler.context.query.q|default('')|urlencode }}">上一页</a>{% endif %}{% if smsBoard.page * smsBoard.pageSize < smsBoard.total %}<a class="rounded button" href="?page={{ smsBoard.page + 1 }}&mode={{ smsBoard.mode }}&classId={{ smsClassScope.selected|urlencode }}&q={{ handler.context.query.q|default('')|urlencode }}">下一页</a>{% endif %}</div></div>
 </section></div></div>
 <script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
-<script src="/sms-addon/rating.js?build=rating-privacy-20261025" defer></script>
+<script src="/sms-addon/rating.js?build=exams-review-20261025" defer></script>
 {% endblock %}

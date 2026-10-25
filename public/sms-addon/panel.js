@@ -295,11 +295,11 @@
     if (!records.length) { const row = element('tr'); const cell = element('td', '', '暂无操作记录'); cell.colSpan = 5; row.append(cell); rows.append(row); }
   }
   async function switchTab(tab) {
-    const required={accounts:'accounts.read',academic:'reports.read',audit:'audit.read'};if(tab==='permissions'&&!state.me.admin||required[tab]&&!state.me.capabilities[required[tab]]){notice('没有此功能的访问权限',true);return;}
+    const required={exams:'exams.read',accounts:'accounts.read',academic:'reports.read',audit:'audit.read'};if(tab==='permissions'&&!state.me.admin||required[tab]&&!state.me.capabilities[required[tab]]){notice('没有此功能的访问权限',true);return;}
     state.tab = tab; notice('');
-    for (const name of ['students', 'permissions', 'audit', 'organization', 'accounts', 'rating', 'courses', 'schedules', 'teachers', 'academic']) $(`sms-${name}-section`).hidden = name !== tab;
+    for (const name of ['students', 'permissions', 'audit', 'organization', 'exams', 'accounts', 'rating', 'courses', 'schedules', 'teachers', 'academic']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
-    try { if (tab === 'organization' || tab === 'accounts' || tab === 'rating' || tab === 'courses' || tab === 'schedules' || tab === 'teachers' || tab === 'academic') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') {app.dispatchEvent(new CustomEvent('sms:tab',{detail:{tab,me:state.me}}));await loadPolicy();} else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
+    try { if (tab === 'exams' || tab === 'organization' || tab === 'accounts' || tab === 'rating' || tab === 'courses' || tab === 'schedules' || tab === 'teachers' || tab === 'academic') { app.dispatchEvent(new CustomEvent('sms:tab', { detail: { tab, me: state.me } })); return; } if (tab === 'permissions') {app.dispatchEvent(new CustomEvent('sms:tab',{detail:{tab,me:state.me}}));await loadPolicy();} else if (tab === 'audit') await loadAudit(); else { await loadFilterOptions(); await loadStudents(); } }
     catch (error) { notice(error.message, true); }
   }
   $('sms-search-form').addEventListener('submit', (event) => { event.preventDefault(); state.page = 1; notice(''); loadStudents(); });
@@ -317,7 +317,7 @@
   let scopeTimer; $('sms-scope-search').addEventListener('input', () => { clearTimeout(scopeTimer); scopeTimer = setTimeout(() => loadScope().catch((error) => notice(error.message, true)), 250); });
   $('sms-refresh-audit').addEventListener('click', () => loadAudit().catch((error) => notice(error.message, true)));
   document.querySelectorAll('.sms-nav').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
-  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes', 'organization'].includes(location.hash.slice(1))) switchTab('organization'); });
+  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes', 'organization','exams'].includes(location.hash.slice(1))) switchTab(location.hash === '#exams'?'exams':'organization'); });
   window.addEventListener('hashchange', () => { if (state.me && ['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) switchTab(location.hash.slice(1)); });
   (async () => {
     try {
@@ -333,7 +333,7 @@
       await loadFilterOptions();
       await loadStudents();
       if (['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) await switchTab(location.hash.slice(1));
-      if (['domains', 'classes', 'organization'].includes(location.hash.slice(1))) await switchTab('organization');
+      if (['domains', 'classes', 'organization','exams'].includes(location.hash.slice(1))) await switchTab(location.hash === '#exams'?'exams':'organization');
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();
 })();

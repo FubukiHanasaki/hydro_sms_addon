@@ -37,6 +37,8 @@ export class Handler {
 }
 export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number };
 export const UserModel: {
+  getById(domain: string, uid: number): Promise<any>;
+  listGroup(domain: string, uid: number): Promise<any[]>;
   create(mail: string, username: string, password: string, uid?: number, ip?: string, priv?: number): Promise<number>;
   setUname(uid: number, username: string): Promise<unknown>;
   setPassword(uid: number, password: string): Promise<unknown>;
@@ -54,4 +56,5 @@ export const DomainModel: {
 };
 
 export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; };
-export const PERM: { PERM_VIEW_RANKING: bigint };
+export const PERM: { PERM_VIEW_RANKING: bigint; PERM_VIEW_CONTEST: bigint; PERM_VIEW_HIDDEN_CONTEST: bigint };
+export const RecordModel: any;
