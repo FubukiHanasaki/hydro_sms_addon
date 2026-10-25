@@ -73,7 +73,7 @@ export class ExamService {
    try{const c=await this.native(actor,e);if(c.rule==='oi')return true;}catch{}
   }return false;
  }
- async participants(actor:number,domain:string,id:string,uids:number[]){const e=await this.exams.findOne({_id:this.key(domain,id)});if(!e)return;if(!await this.canUpload(actor,domain,id))throw new SmsError(403,'没有当前班级代码上传权限');
+ async participants(actor:number,domain:string,id:string,uids:number[]){const e=await this.exams.findOne({_id:this.key(domain,id)});if(!e)return;if(!await this.canUpload(actor,domain,id))throw new SmsError(403,'没有当前班级代码上传权限');if(e.classIds.includes('system'))return;
   const eligibleIds=await this.db.collection('domain.user').distinct('uid',{domainId:{$in:e.classIds},join:true,uid:{$in:uids}});if(uids.some(uid=>!eligibleIds.includes(uid)))throw new SmsError(403,'代码包包含参赛班级之外的账号');
  }
  async correction(actor:number,domain:string,id:string){const e=await this.exams.findOne({_id:this.key(domain,id)});if(!e||e.archived)return false;if(!await this.allowed(actor,e,'exams.read'))return false;const c=await this.native(actor,e);return eligible.includes(c.rule)&&+new Date(c.endAt)<=Date.now()&&!!await this.db.collection('domain.user').findOne({domainId:{$in:e.classIds},uid:actor,join:true});}
