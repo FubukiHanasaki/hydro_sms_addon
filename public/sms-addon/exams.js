@@ -2,6 +2,8 @@
 (() => {
  'use strict';
  const app=document.getElementById('sms-app'),native=document.getElementById('sms-exam-native');if(!app&&!native)return;
+ // Keep the native contest template intact; mount metadata inside its title card.
+ if(native){const header=document.querySelector('.row > .medium-9.columns > .section:first-child > .section__header');if(header){header.after(native);native.hidden=false;}}
  const base=app?.dataset.exams||native?.dataset.api;if(!base)return;
  const $=id=>document.getElementById(id);let me,page=1,serial=0,ready=false;const difficulties=['入门','CSP-J','CSP-S','NOIP','省选/NOI'];
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
