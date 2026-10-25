@@ -128,7 +128,7 @@
         if (request !== accountSearchRequest || !container.isConnected) return;
         results.replaceChildren();
         for (const user of users) {
-          const button = element('button', 'rounded button', `${user.username} · UID ${user.uid}${user.available ? '' : '（已绑定其他学生）'}`);
+          const button = element('button', 'rounded button', `${user.displayName || user.username} · UID ${user.uid}${user.available ? '' : '（已绑定其他学生）'}`);
           button.type = 'button'; button.disabled = !user.available;
           button.addEventListener('click', () => {
             uidInput.value = String(user.uid); input.value = user.username;
@@ -173,6 +173,7 @@
       $('sms-dialog-title').textContent = student ? student.basic.name : '新建学生';
       const fields = $('sms-student-fields'); fields.replaceChildren();
       fields.append(fieldGroup('基本资料', basicFields, student?.basic || {}, caps.edit, 'basic'));
+      if(caps.editName===false){const name=fields.querySelector('[name="basic.name"]');if(name)name.readOnly=true;}
       if (caps.sensitive) fields.append(fieldGroup('个人与联系资料', sensitiveFields, student?.sensitive || {}, caps.editSensitive, 'sensitive'));
       if (caps.internalNote) {
         fields.append(element('h2', 'section__title', '内部备注'));

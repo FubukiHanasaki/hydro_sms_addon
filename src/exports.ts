@@ -1,3 +1,4 @@
+import { NameService } from './names';
 import type { ExamService } from './exams';
 import { AcademicService } from './academic';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
@@ -95,6 +96,7 @@ export class ExportService {
  async download(actor:number,kind:string,q:Record<string,unknown>,domain='system'){
   if(!Number.isSafeInteger(actor)||actor<=0)throw new SmsError(403,'请先登录');const started=Date.now(),policy=await this.students.policy(),before=JSON.stringify(policy),authority=JSON.stringify(await this.students.authorization.snapshot(actor));const data=await this.build(actor,kind,q,domain);
   if(policy.grants.some(g=>g.uid===actor&&g.expiresAt&&Date.parse(g.expiresAt)>started&&Date.parse(g.expiresAt)<=Date.now())||JSON.stringify(await this.students.policy())!==before||JSON.stringify(await this.students.authorization.snapshot(actor))!==authority)throw new SmsError(409,'授权在导出期间发生变化，请重试');
+  data.rows=await new NameService(this.db).exportNames(actor,data.headers,data.rows);
   const result=encodeExport(data,String(q.format??'xlsx'));await this.students.audit(actor,'exports.download',kind,[...(q.sensitive==='true'?['sensitive']:[]),'rows:'+data.rows.length]);return result;
  }
 }

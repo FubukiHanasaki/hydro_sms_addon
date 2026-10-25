@@ -1,3 +1,4 @@
+import { NameService } from './names';
 import { randomUUID } from 'node:crypto';
 import type { Db, Document } from 'mongodb';
 import { StudentService } from './service';
@@ -160,13 +161,14 @@ export class OrganizationService {
     if (domain._id === 'system') await this.ensureMainMembers();
     const q = text(query ?? '', 80, '搜索词'); const page = this.page(pageValue);
     const teachers = meta?.teacherUids ?? [];
+    const visibleNames=await new NameService(this.db).visibleIds(uid);
     const canManage=await this.students.authorization.can(uid,'classes.members',[domain._id]),canTeachers=await this.students.authorization.can(uid,'classes.teachers',[domain._id]);
     const protectedUids=[...new Set([domain.owner,...teachers,...Object.entries(meta?.memberKinds??{}).filter(([,kind])=>kind==='teacher').map(([id])=>Number(id)),...(await this.students.authorization.policy()).admins])];
     const [result] = await this.db.collection('domain.user').aggregate([
       { $match: { domainId: domain._id, join: true, uid: staff ? { $gt: 0 } : uid } },
       { $lookup: { from: 'user', localField: 'uid', foreignField: '_id', as: 'user' } }, { $unwind: '$user' },
       { $lookup: { from: 'sms_students', localField: 'uid', foreignField: 'hydroUid', pipeline: [{ $project: { 'basic.name': 1 } }], as: 'student' } },
-      ...q ? [{ $match: { $or: [{ 'user.uname': { $regex: this.pattern(q), $options: 'i' } }, { 'student.basic.name': { $regex: this.pattern(q), $options: 'i' } }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } }] : [],
+      ...q ? [{ $match: { $or: [{ 'user.uname': { $regex: this.pattern(q), $options: 'i' } }, { 'student.basic.name': { $regex: this.pattern(q), $options: 'i' },...(visibleNames?{uid:{$in:[...visibleNames]}}:{}) }, .../^\d+$/.test(q) ? [{ uid: Number(q) }] : []] } }] : [],
       { $facet: { count: [{ $count: 'total' }], members: [{ $sort: { uid: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 0, uid: 1, username: '$user.uname', protectedMember:{$or:[{$in:['$uid',protectedUids]},{$ne:[{$ifNull:['$role','default']},'default']}]}, studentName: { $first: '$student.basic.name' }, kind: { $cond: [{ $in: ['$uid', teachers] }, 'teacher', { $cond: [{ $gt: [{ $size: '$student' }, 0] }, 'student', 'member'] }] }, canRemove: { $and: [canManage, { $ne: ['$uid', domain.owner] }, domain._id !== 'system'] } } }] } },
     ]).toArray();
     return { total: result?.count[0]?.total ?? 0, members: (result?.members ?? []).map((member: Document) => ({ ...member, kind: meta?.memberKinds?.[String(member.uid)] ?? member.kind,canEdit:canManage&&(!member.protectedMember||canTeachers),canRemove:member.canRemove&&(!member.protectedMember||canTeachers) })), page, pageSize: 20, version: meta?.version ?? 0, canManage, canTeachers };

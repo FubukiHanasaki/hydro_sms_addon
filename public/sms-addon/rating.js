@@ -145,7 +145,7 @@
             const data = await api(`${base}/${uid}?page=${page}`);
             if (!view.d.open || request !== serial)
                 return;
-            view.d.querySelector('h1').textContent = `${data.username} · Rating`;
+            view.d.querySelector('h1').textContent = `${data.displayName || data.username} · Rating`;
             metrics.replaceChildren();
             for (const [label, value] of [['当前 Rating', number(data.rating)], ['称号', data.title], ['最高 Rating', number(data.peak)], ['近 30 天', signed(data.recent.delta)]]) {
                 const block = el('div');
@@ -216,7 +216,7 @@
         const rows = $('sms-rating-rows');
         rows.replaceChildren();
         for (const u of data.users) {
-            const row = el('tr'), account = el('td'), link = el('a', '', u.username);
+            const row = el('tr'), account = el('td'), link = el('a', '', u.displayName || u.username);
             if (data.anonymous) account.append(el('span', '', u.username));
             else { link.href = `/user/${u.uid}`; account.append(link, el('div', 'sms-secondary', `UID ${u.uid}`)); }
             const rating = el('td'), tier = el('span', 'sms-rating-tier', u.title);

@@ -1,3 +1,4 @@
+import { NameService, installNames } from './src/names';
 import { ExamService } from './src/exams';
 import { examHost, installExams } from './src/exam-hydro';
 import { MemberImportService } from './src/member-import';
@@ -321,4 +322,6 @@ export async function apply(ctx: Context) {
     const student = await service.byHydroUid(handler.user._id, handler.response.body.udoc._id);
     if (student) handler.response.body.smsStudent = student;
   });
+  installNames(ctx, new NameService(ctx.db.db));
+
 }

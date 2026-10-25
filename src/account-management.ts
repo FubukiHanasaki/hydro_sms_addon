@@ -1,3 +1,4 @@
+import { NameService } from './names';
 import { randomUUID } from 'node:crypto';
 import type { Db, Document } from 'mongodb';
 import { StudentService } from './service';
@@ -26,10 +27,11 @@ export class AccountManagement {
     const q = text(query ?? '', 80, '搜索词'); const enabled = text(enabledValue ?? '', 10, '账号状态'); const page = Number(pageValue ?? 1);
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new SmsError(400, '页码无效');
     if (!['', 'enabled', 'disabled'].includes(enabled)) throw new SmsError(400, '账号状态无效');
+    const visibleNames=await new NameService(this.db).visibleIds(uid);
     const [result] = await this.users.aggregate([
       { $match: { _id: { $gt: 0 } } },
       { $lookup: { from: 'sms_students', localField: '_id', foreignField: 'hydroUid', pipeline: [{ $project: { 'basic.name': 1 } }], as: 'student' } },
-      ...q ? [{ $match: { $or: [{ uname: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }, { 'student.basic.name': { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }, .../^\d+$/.test(q) ? [{ _id: Number(q) }] : []] } }] : [],
+      ...q ? [{ $match: { $or: [{ uname: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }, { 'student.basic.name': { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },...(visibleNames?{_id:{$in:[...visibleNames]}}:{}) }, .../^\d+$/.test(q) ? [{ _id: Number(q) }] : []] } }] : [],
       ...enabled ? [{ $match: { priv: { [enabled === 'enabled' ? '$bitsAllSet' : '$bitsAllClear']: this.host.profilePrivilege } } }] : [],
       { $lookup: { from: 'sms_account_state', localField: '_id', foreignField: '_id', as: 'state' } },
       { $facet: { count: [{ $count: 'total' }], rows: [{ $sort: { _id: 1 } }, { $skip: (page - 1) * 20 }, { $limit: 20 }, { $project: { _id: 1, uname: 1, priv: 1, studentName: { $first: '$student.basic.name' }, studentId: { $first: '$student._id' }, version: { $ifNull: [{ $first: '$state.version' }, 0] } } }] } },

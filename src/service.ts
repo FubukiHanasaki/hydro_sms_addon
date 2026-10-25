@@ -1,3 +1,4 @@
+import { NameService } from './names';
 import { AuthorizationService } from './authorization';
 import { studentLock, requireNoStudentBatch } from './student-lock';
 import { createHash, randomUUID } from 'node:crypto';
@@ -114,7 +115,9 @@ export class StudentService {
     const and: Record<string, unknown>[] = [readFilter(policy, uid)];
     if (q) {
       const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      and.push({ 'basic.name': { $regex: pattern, $options: 'i' } });
+      const visible=await new NameService(this.db).visibleIds(uid);
+      const users=await this.db.collection<{_id:number;uname:string}>('user').find({uname:{$regex:pattern,$options:'i'}},{projection:{_id:1}}).toArray();
+      and.push({$or:[{'basic.name':{$regex:pattern,$options:'i'},...(visible?{hydroUid:{$in:[...visible]}}:{})},{hydroUid:{$in:users.map(u=>u._id)}}]});
     }
     if (status) and.push({ 'basic.status': status });
     if (grade) and.push({ 'basic.grade': grade });
@@ -245,7 +248,10 @@ export class StudentService {
     const $unset: Record<string, ''> = {};
     if ('basic' in input || 'sensitive' in input || 'internalNote' in input) {
       if (!allows(policy, uid, 'students.write', id)) throw new SmsError(403, '没有资料编辑权限');
-      if ('basic' in input) $set.basic = validateBasic(input.basic);
+      if ('basic' in input) {
+        $set.basic = validateBasic(input.basic);
+        if(student.hydroUid){const names=await new NameService(this.db).resolve(uid,[student.hydroUid]);if(!names.get(student.hydroUid)?.canViewProfileName)$set.basic.name=student.basic.name;}
+      }
       if ('sensitive' in input || 'internalNote' in input) {
         if (!allows(policy, uid, 'students.sensitive', id)) throw new SmsError(403, '没有敏感资料管理权限');
         if ('sensitive' in input) $set.sensitive = validateSensitive(input.sensitive);

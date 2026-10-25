@@ -8,7 +8,7 @@
 <script src="/sms-addon/profile.js?build=profile-overview-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/panel.css?v=native-ui-colors-20261025">
 <script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
-<script src="/sms-addon/rating.js?build=exams-review-20261025" defer></script>
+<script src="/sms-addon/rating.js?build=profile-names-20261025" defer></script>
 <style>
   .user-profile-bg {
     background-image: url("{{ udoc.backgroundImage }}"), url("/components/profile/backgrounds/1.jpg");
@@ -25,8 +25,7 @@
             </div>
             <div class="media__body profile-header__main">
               <h1>
-                {{ udoc['uname'] }}
-                {% if handler.user.hasPerm(perm.PERM_VIEW_USER_PRIVATE_INFO) and udoc.displayName %}<small>({{ udoc['displayName'] }})</small>{% endif %}
+                {{ udoc.smsDisplayName or udoc.uname }}
               </h1>
               <p>
                 {{ _('UID') }}: {{ udoc['_id'] }},

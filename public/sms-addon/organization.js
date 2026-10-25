@@ -78,7 +78,7 @@
     const c = id ? await api(`${app.dataset.classes}/${encodeURIComponent(id)}`) : null;
     const editable=c?c.canEdit:me.capabilities['classes.create'];const root = dialog(c ? c.name : '新建班级与子域', editable);
     if (!editable) {
-      for (const [label, value] of [['子域 ID', c.domainId], ['班型', c.type], ['学年', c.academicYear], ['上课安排', c.schedule], ['地点', c.location], ['说明', c.description], ['状态', c.status === 'active' ? '开班中' : '已归档'], ['任课教师', c.teachers.map(t => t.username).join('、')]]) root.append(el('p', 'sms-org-value', `${label}：${value || '未填写'}`)); return;
+      for (const [label, value] of [['子域 ID', c.domainId], ['班型', c.type], ['学年', c.academicYear], ['上课安排', c.schedule], ['地点', c.location], ['说明', c.description], ['状态', c.status === 'active' ? '开班中' : '已归档'], ['任课教师', c.teachers.map(t => t.displayName || t.username).join('、')]]) root.append(el('p', 'sms-org-value', `${label}：${value || '未填写'}`)); return;
     }
     if (c?.syncState !== 'ready' && c) root.append(el('p', 'help-text', '上次保存未完成，请核对后重试。'));
     const grid = el('div', 'sms-form-grid'); root.append(grid); const inputs = {};
@@ -147,7 +147,7 @@
 
       let timer; let accountRequest = 0;
       const search = async () => { const current = ++accountRequest; if (!addQuery.value.trim()) { results.replaceChildren(); return; } const url = new URL(app.dataset.users, location.origin); url.search = new URLSearchParams({ q: addQuery.value.trim(), classId:id }); const users = await api(url); if (current !== accountRequest || activeDialog !== dialogSerial) return;
-        results.replaceChildren(); for (const user of users) results.append(button(`${user.username} · UID ${user.uid}`, () => { selectedUser = user; selected.textContent = `已选择 ${user.username}（UID ${user.uid}）`; confirm.disabled = false; confirm.removeAttribute('data-disabled'); results.replaceChildren(); })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));
+        results.replaceChildren(); for (const user of users) results.append(button(`${user.displayName || user.username} · UID ${user.uid}`, () => { selectedUser = user; selected.textContent = `已选择 ${user.username}（UID ${user.uid}）`; confirm.disabled = false; confirm.removeAttribute('data-disabled'); results.replaceChildren(); })); if (!users.length) results.append(el('p', 'help-text', '没有匹配的账号'));
       };
       addQuery.addEventListener('input', () => { clearTimeout(timer); accountRequest++; selectedUser = null; selected.textContent = ''; confirm.disabled = true; confirm.setAttribute('data-disabled', ''); timer = setTimeout(() => search().catch(error), 250); }); addQuery.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); search().catch(error); } });
     }
@@ -159,7 +159,7 @@
         if (memberPage > 1 && !data.members.length) { memberPage = Math.max(1, Math.ceil(data.total / 20)); return load(); }
         exportQuery=query.value;version = data.version; summary.textContent = `共 ${data.total} 名成员`; list.replaceChildren();
         for (const m of data.members) {
-          const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.studentName || m.username), el('div', 'sms-secondary', `${m.studentName ? `${m.username} · ` : ''}UID ${m.uid}`));
+          const row = el('div', 'sms-member-row'); const person = el('div', 'sms-member-person'); person.append(el('div', 'sms-student-name', m.displayName || m.username), el('div', 'sms-secondary', `UID ${m.uid}`));
           row.append(person); const actions = el('div', 'sms-member-actions');
           if (m.canEdit) {
             row.classList.add('sms-member-editable'); const identity = el('select', 'select sms-member-role-select'); identity.setAttribute('aria-label', `修改 ${m.username} 的身份`);

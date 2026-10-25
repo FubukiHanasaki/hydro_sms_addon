@@ -1,3 +1,4 @@
+import { NameService } from './names';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { RatingEngine, legacySmsRatingEngine } from './rating-engine';
 import { randomUUID, createHash } from 'node:crypto';
@@ -311,7 +312,8 @@ export class RatingService {
         // Anonymous account searches would act as an identity oracle. Ignore all
         // identity predicates and number the full sorted board before pagination.
         const board = await this.board(domainId, anonymous ? '' : query, pageValue, mode, anonymous ? '' : grade, anonymous ? '' : school, actor);
-        return { ...board, anonymous, users: board.users.map((u, i) => anonymous ? { ...u, uid: null, username: `选手${(board.page - 1) * board.pageSize + i + 1}` } : u) };
+        const result={ ...board, anonymous, users: board.users.map((u, i) => anonymous ? { ...u, uid: null, username: `选手${(board.page - 1) * board.pageSize + i + 1}` } : u) };
+        return anonymous?result:new NameService(this.db).project(actor,result);
     }
     async history(uidValue: unknown, pageValue: unknown = 1) {
         const uid = positiveInt(Number(uidValue), 'UID'), page = positiveInt(Number(pageValue), '页码');
