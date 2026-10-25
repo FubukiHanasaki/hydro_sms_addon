@@ -423,16 +423,17 @@
 .sms-exam-table { min-width: 760px; }
 @media (max-width:767px) { .sms-exam-dialog { width: calc(100vw - 16px); } .sms-exam-dialog .sms-form-grid { grid-template-columns: minmax(0,1fr); } .sms-exam-dialog .sms-dialog-footer { flex-wrap: wrap; } }
 
-/* Product rule: black text; hierarchy comes from spacing, size and weight. */
-:is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating),
-:is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) *,
-body:has(#sms-exam-native) .section,body:has(#sms-exam-native) .section *,
-body:has(.sms-profile-tabs) .section,body:has(.sms-profile-tabs) .section * { color: #000 !important; }
+/* Body text stays black; navigation and Rating indicators keep their own colors. */
+:is(
+  .sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating,
+  :is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) *,
+  body:has(#sms-exam-native) .section,body:has(#sms-exam-native) .section *,
+  body:has(.sms-profile-tabs) .section,body:has(.sms-profile-tabs) .section *
+):not(:where(.sms-sidebar,.sms-sidebar *,.sms-rating-tier,.sms-rating-tier *,
+  .sms-rating-tier-value,.sms-rating-title,.sms-rating-up,.sms-rating-down)) { color: #000 !important; }
 :is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) input::placeholder { color: #000; opacity:1; }
 :is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) :disabled { opacity:1; -webkit-text-fill-color:#000; }
 :is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating]) .button:disabled { background:#eee; border-color:#ddd; cursor:not-allowed; }
 :is(.sms-shell,.sms-exam-dialog,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) svg text { fill:#000 !important; opacity:1; }
 
 :is(.sms-shell,.sms-exam-dialog,.sms-exam-native,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) :is(.sms-secondary,.help-text,.sms-rating-chart-empty,.sms-rating-metrics span) { opacity:1; }
-
-:is(.sms-shell,.sms-rating-dialog,[data-sms-native-rating],.sms-profile-rating) .sms-rating-tier { background:color-mix(in srgb,var(--sms-tier-color,#888) 18%,white) !important; }
