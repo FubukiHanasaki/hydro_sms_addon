@@ -421,4 +421,9 @@
 #sms-exam-native-error:empty { display: none; }
 #sms-exam-native-error:not(:empty) { margin-top: 8px; line-height: 1.6; color: #c0392b; }
 .sms-exam-table { min-width: 760px; }
+.sms-exam-rating { margin-top: 5px; }
+.sms-exam-rated-badge { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 3px 9px; border: 1px solid transparent; border-radius: 4px; font-size: 13px; font-weight: 700; line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+.sms-exam-rated-badge.is-rated { color: #fff; background: #16834a; border-color: #16834a; }
+.sms-exam-rated-badge.is-unrated { color: #333; background: #f5f6f7; border-color: #dce1e5; font-weight: 400; }
+
 @media (max-width:767px) { .sms-exam-dialog { width: calc(100vw - 16px); } .sms-exam-dialog .sms-form-grid { grid-template-columns: minmax(0,1fr); } .sms-exam-dialog .sms-dialog-footer { flex-wrap: wrap; } }
