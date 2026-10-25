@@ -1,4 +1,5 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
+import { captureNative, restoreNative } from './exam-native';
 import { randomUUID } from 'node:crypto';
 import { ObjectId, type Db } from 'mongodb';
 import { StudentService } from './service';
@@ -16,7 +17,7 @@ export class ExamService {
  constructor(private db: Db, private students: StudentService, private org: OrganizationService, private rating: RatingService, private host: ExamHost) {}
  get exams(){return this.db.collection<ExamDoc>('sms_exams');}
  get settings(){return this.db.collection('sms_exam_settings');}
- async init(){await this.exams.createIndex({classIds:1,archived:1});await this.db.collection('sms_exam_initializations').createIndex({expiresAt:1},{expireAfterSeconds:0});}
+ async init(){await this.exams.createIndex({classIds:1,archived:1});await this.db.collection('sms_exam_initializations').createIndex({expiresAt:1},{expireAfterSeconds:0});await restoreNative(this.db);}
  key(domain: unknown,id: unknown){const d=text(domain,160,'子域 ID'),c=text(id,24,'比赛 ID');if(!d||! /^[a-f\d]{24}$/i.test(c))throw new SmsError(400,'比赛 ID 无效');return `${d}:${c.toLowerCase()}`;}
  async ready(){return !!(await this.settings.findOne({_id:'global' as any}))?.initializedAt;}
  async requireReady(){if(!await this.ready())throw new SmsError(409,'请先由插件管理员完成过往比赛 Rated 初始化');}
@@ -57,15 +58,23 @@ export class ExamService {
  private ratingState(config:any,published:any){return {rated:config?.enabled??false,settled:!!published,reviewPending:!!config&&(!!config.enabled!==!!published||(!!published&&((published.review?.configVersion??0)!==(config.version??0)||(published.review?.resultVersion??0)!==(config.resultVersion??0))))};}
  async view(actor:number,e:ExamDoc,c:any){
   const config=await this.db.collection('sms_rating_contests').findOne({_id:e._id as any});const head=await this.rating.head();const published=await this.rating.sources.findOne({generation:head.generation,key:`contest:${e._id}`});
-  return {...e,title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,durationMinutes:Math.round((+new Date(c.endAt)-+new Date(c.beginAt))/60000),fullScore:(c.pids??[]).reduce((sum:number,pid:number)=>sum+(c.score?.[pid]??100),0),problemCount:c.pids?.length??0,...this.ratingState(config,published),difficulty:config?.difficulty??'CSP-J',reviewedAt:published?.review?.at??null,canEdit:await this.allowed(actor,e,'exams.update'),canArchive:await this.allowed(actor,e,'exams.archive'),canReview:await this.students.authorization.admin(actor),canUpload:!!(globalThis as any)[OFFLINE_BRIDGE]&&+new Date(c.endAt)<=Date.now()&&await this.canUpload(actor,e.domainId,e.contestId),url:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}`,uploadUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}#offline-code`};
+  return {...e,editUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}/edit`,title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,durationMinutes:Math.round((+new Date(c.endAt)-+new Date(c.beginAt))/60000),fullScore:(c.pids??[]).reduce((sum:number,pid:number)=>sum+(c.score?.[pid]??100),0),problemCount:c.pids?.length??0,...this.ratingState(config,published),difficulty:config?.difficulty??'CSP-J',reviewedAt:published?.review?.at??null,canEdit:await this.allowed(actor,e,'exams.update'),canArchive:await this.allowed(actor,e,'exams.archive'),canReview:await this.students.authorization.admin(actor),canUpload:!!(globalThis as any)[OFFLINE_BRIDGE]&&+new Date(c.endAt)<=Date.now()&&await this.canUpload(actor,e.domainId,e.contestId),url:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}`,uploadUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}#offline-code`};
  }
  async detail(actor:number,domain:unknown,id:unknown){const e=await this.model(actor,domain,id);return this.view(actor,e,await this.native(actor,e));}
+ async editor(actor:number,domainId:string,contestId:string){
+  await this.requireReady();const e=await this.exams.findOne({_id:this.key(domainId,contestId)});
+  if(e)await this.require(actor,e,'exams.update');else {await this.students.requireAction(actor,'exams.create',[domainId]);await this.students.requireAction(actor,'exams.update',[domainId]);}
+  const cfg=await this.db.collection('sms_rating_contests').findOne({_id:this.key(domainId,contestId) as any});
+  const scope=await this.students.authorization.scope(actor,'exams.update');
+  const domains=await this.db.collection('domain').find(scope===null?{}:{_id:{$in:scope} as any},{projection:{_id:1,name:1}}).toArray();
+  return {exam:e??{domainId,contestId,classIds:[domainId],examType:'模拟赛',scope:'',source:'',remark:'',version:0},rated:cfg?.enabled??false,difficulty:cfg?.difficulty??'CSP-J',difficulties:DIFFICULTIES,classes:domains.map(d=>({id:String(d._id),name:d.name||String(d._id)}))};
+ }
  async candidates(actor:number,domainValue:unknown){
   const domainId=text(domainValue,160,'比赛子域');await this.students.requireAction(actor,'exams.create',[domainId]);
   const docs=await this.db.collection('document').find({domainId,docType:30,rule:{$in:eligible}}).sort({beginAt:-1}).limit(200).toArray();const result=[];
   for(const c of docs)if(await this.host.contest(actor,domainId,String(c.docId)))result.push({id:String(c.docId),title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt});return result;
  }
- async save(actor:number,value:unknown){
+ async save(actor:number,value:unknown,nativeWrite?:()=>Promise<void>){
   await this.requireReady();const b=object(value);this.org.fields(b,['domainId','contestId','classIds','examType','scope','source','remark','difficulty','rated','version','archived']);
   const key=this.key(b.domainId,b.contestId),domainId=key.slice(0,key.lastIndexOf(':')),contestId=key.slice(key.lastIndexOf(':')+1);
   if(!Array.isArray(b.classIds)||!b.classIds.length||b.classIds.length>50||new Set(b.classIds).size!==b.classIds.length||b.classIds.some(x=>typeof x!=='string'||!x||x.length>160))throw new SmsError(400,'请选择有效且不重复的参赛班级');
@@ -73,11 +82,14 @@ export class ExamService {
   const old=await this.exams.findOne({_id:key});await this.students.requireAction(actor,old?'exams.update':'exams.create',b.classIds as string[]);if(old)await this.require(actor,old,'exams.update');await this.students.requireAction(actor,'exams.update',b.classIds as string[]);
   for(const id of b.classIds)await this.org.domain(id as string);const c=await this.native(actor,{domainId,contestId});if(!eligible.includes(c.rule))throw new SmsError(400,'此赛制暂不支持模拟赛管理');
   const data={domainId,contestId,classIds:b.classIds as string[],examType:text(b.examType??'模拟赛',80,'比赛类型'),scope:text(b.scope??'',160,'比赛范围'),source:text(b.source??'',300,'来源'),remark:text(b.remark??'',2000,'说明'),archived:old?.archived??false,updatedBy:actor,updatedAt:new Date()};
+  if((old?.version??0)!==b.version)throw new SmsError(409,'模拟赛信息已更新，请刷新');
   return this.org.locked(`exam:${key}`,async()=>{
    const fresh=await this.exams.findOne({_id:key});if((fresh?.version??0)!==b.version)throw new SmsError(409,'模拟赛信息已更新，请刷新');
    await this.students.requireAction(actor,fresh?'exams.update':'exams.create',data.classIds);if(fresh)await this.require(actor,fresh,'exams.update');await this.native(actor,{domainId,contestId});
+   if(nativeWrite)await nativeWrite();
    await this.students.mutation(actor,'exams.save',key,Object.keys(data),async()=>{await this.exams.updateOne({_id:key},{$set:data,$inc:{version:1}},{upsert:true});});
    await this.rating.configureRequest(actor,domainId,contestId,b.difficulty as Difficulty,b.rated as boolean);
+   await captureNative(this.db,await this.native(actor,{domainId,contestId}));
    return this.detail(actor,domainId,contestId);
   });
  }
@@ -100,7 +112,7 @@ export class ExamService {
   const docs=await this.db.collection('document').find({docType:30,rule:{$in:eligible},endAt:{$lte:new Date()}}).sort({domainId:1,docId:1}).limit(2001).toArray();if(docs.length>2000)throw new SmsError(400,'过往比赛超过2000场，请先分批整理');
   const allowedDocs=[];for(const c of docs)if(await this.host.contest(actor,c.domainId,String(c.docId)))allowedDocs.push(c);
   const head=await this.rating.head(),sources=await this.rating.allSources(head.generation);const configs=await this.db.collection('sms_rating_contests').find({}).toArray();
-  const rows=allowedDocs.map(c=>{const key=`${c.domainId}:${c.docId}`,config=configs.find(v=>String(v._id)===key),published=sources.find(s=>s.key===`contest:${key}`);return {key,domainId:c.domainId,contestId:String(c.docId),title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,difficulty:config?.difficulty??'CSP-J',configVersion:config?.version??0,previousRated:!!config?.enabled||!!c.rated,published:!!published};});
+  const rows=allowedDocs.map(c=>{const key=`${c.domainId}:${c.docId}`,config=configs.find(v=>String(v._id)===key),published=sources.find(s=>s.key===`contest:${key}`);return {key,domainId:c.domainId,contestId:String(c.docId),title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,difficulty:config?.difficulty??'CSP-J',configVersion:config?.version??0,previousRated:config?!!config.enabled:!!c.rated,published:!!published};});
   const id=randomUUID();await this.db.collection('sms_exam_initializations').insertOne({_id:id as any,actor,revision:head.revision,rows,state:'preview',expiresAt:new Date(Date.now()+1800000)});return {id,revision:head.revision,rows,importCheckpoints:sources.filter(s=>s.kind==='import').length};
  }
  async initializationConfirm(actor:number,value:unknown){
@@ -115,6 +127,7 @@ export class ExamService {
    for(const r of rows){await this.exams.updateOne({_id:r.key},{$setOnInsert:{domainId:r.domainId,contestId:r.contestId,classIds:[r.domainId],examType:'模拟赛',scope:'',source:'',remark:'',archived:false,version:1,updatedBy:actor,updatedAt:new Date()}},{upsert:true});await this.db.collection('sms_rating_contests').updateOne({_id:r.key as any},{$set:{domainId:r.domainId,contestId:r.contestId,difficulty:r.difficulty,enabled:selected.has(r.key),updatedBy:actor,updatedAt:new Date()},$inc:{version:1}},{upsert:true});}
    return old.filter(s=>s.kind==='import'||!keys.has(s.key)||selected.has(s.key.slice(8)));
   },p.revision);
+  await restoreNative(this.db);
   await this.settings.updateOne({_id:'global' as any},{$set:{initializedAt:new Date(),initializedBy:actor,ratedCount:selected.size}},{upsert:true});await this.db.collection('sms_exam_initializations').updateOne({_id:p._id},{$set:{state:'complete'}});await this.students.audit(actor,'exams.initialize','global',['rated:'+selected.size,'total:'+rows.length]);return {...result,initialized:true,rated:selected.size,total:rows.length};
   });
  }

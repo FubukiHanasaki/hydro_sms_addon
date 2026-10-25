@@ -1,0 +1,38 @@
+{% extends "contest_edit.html" %}
+{% block content %}
+{{ super() }}
+<div id="sms-contest-edit-fields" hidden>
+  <div class="section__header"><h2 class="section__title">模拟赛设置</h2></div>
+  <div class="section__body">
+    <input type="hidden" name="smsVersion" value="{{ smsEditor.exam.version }}">
+    <div class="row">
+      <div class="medium-6 columns"><label>参赛班级
+        <select name="smsClassIds" multiple size="5" required>
+          {% for c in smsEditor.classes %}<option value="{{ c.id }}"{% if c.id in smsEditor.exam.classIds %} selected{% endif %}>{{ c.name }} ({{ c.id }})</option>{% endfor %}
+        </select>
+      </label></div>
+      <div class="medium-3 columns"><label>比赛类型<input class="textbox" name="smsExamType" value="{{ smsEditor.exam.examType }}" maxlength="80"></label></div>
+      <div class="medium-3 columns"><label>比赛难度<select name="smsDifficulty">{% for level in smsEditor.difficulties %}<option value="{{ level }}"{% if level == smsEditor.difficulty %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label></div>
+    </div>
+    <div class="row">
+      <div class="medium-6 columns"><label>比赛范围<input class="textbox" name="smsScope" value="{{ smsEditor.exam.scope }}" maxlength="160"></label></div>
+      <div class="medium-6 columns"><label>来源<input class="textbox" name="smsSource" value="{{ smsEditor.exam.source }}" maxlength="300"></label></div>
+    </div>
+    <label>说明<textarea class="textbox" name="smsRemark" maxlength="2000" rows="3">{{ smsEditor.exam.remark }}</textarea></label>
+  </div>
+</div>
+<script>
+(() => {
+ const fields=document.getElementById('sms-contest-edit-fields');
+ const form=document.querySelector('form[method="post"]');
+ if(!fields||!form)return;
+ const settings=form.querySelector('input[name="langs"]')?.closest('.section__body');
+ const target=settings?.previousElementSibling;
+ if(target)target.before(fields);else form.append(fields);
+ fields.hidden=false;
+ // One Rated control for both Hydro and SMS, including explicit false.
+ const rated=form.querySelector('input[type="checkbox"][name="rated"]');
+ if(rated)rated.checked={{ 'true' if smsEditor.rated else 'false' }};
+})();
+</script>
+{% endblock %}

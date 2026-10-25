@@ -1,6 +1,7 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
+import { captureNative } from './exam-native';
 import { ObjectId } from 'mongodb';
-import { Context, ContestModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError } from 'hydrooj';
+import { Context, ContestModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError, ValidationError } from 'hydrooj';
 import { ExamService, EXAM_BRIDGE } from './exams';
 import { SmsError } from './types';
 import { installCorrectionRecords } from './correction-records';
@@ -31,8 +32,38 @@ export function installExams(ctx:Context,exams:ExamService){
   try{await exams.requireReady();await exams.require(h.user?._id??0,e,'exams.read');await exams.native(h.user?._id??0,e);}catch(err){if(err instanceof SmsError)throw new ForbiddenError();throw err;}
  });
  const changed=async(domain:string,id:string)=>{if(domain&&/^[a-f\d]{24}$/i.test(id))await ctx.db.db.collection('sms_rating_contests').updateOne({_id:`${domain}:${id}` as any},{$inc:{resultVersion:1}});};
- ctx.on('contest/edit',async(c:any)=>{await changed(c.domainId,String(c.docId));});
+ ctx.on('contest/edit',async(c:any)=>{await captureNative(ctx.db.db,c);await changed(c.domainId,String(c.docId));});
  ctx.on('record/judge',async(r:any)=>{if(r?.contest)await changed(r.domainId,String(r.contest));});
+ // Keep Hydro's complete editor, validators, permission checks and scheduling
+ // side effects. SMS fields share the same submit, scoped checks and version lock.
+ ctx.on('handler/before/ContestEdit',async(h:any)=>{
+  const id=String(h.args?.tid??'');if(!/^[a-f\d]{24}$/i.test(id))return;
+  if(h.context.method!=='POST')return;
+  const existing=await exams.exams.findOne({_id:exams.key(h.domain._id,id)});
+  const b=h.context.request.body??{};
+  if(!existing&&!Object.hasOwn(b,'smsVersion'))return;
+  if(existing)try{await exams.require(h.user._id,existing,'exams.update');}catch(err){if(err instanceof SmsError)throw new ForbiddenError();throw err;}
+  if(b.operation!=='update')return;
+  const original=h.postUpdate.bind(h);
+  h.postUpdate=async(...args:any[])=>{
+   try {
+    if(!Object.hasOwn(b,'smsVersion'))throw new SmsError(409,'请刷新比赛编辑页后重试');
+    const payload={domainId:h.domain._id,contestId:id,version:Number(b.smsVersion),
+     classIds:Array.isArray(b.smsClassIds)?b.smsClassIds:b.smsClassIds?[b.smsClassIds]:[],
+     examType:b.smsExamType,scope:b.smsScope,source:b.smsSource,remark:b.smsRemark,
+     difficulty:b.smsDifficulty,rated:!!(b.rated&&!['false','off','no','0'].includes(b.rated))};
+    if(!['oi','ioi','strictioi','acm'].includes(b.rule))throw new SmsError(400,'模拟赛暂不支持此赛制');
+    await exams.save(h.user._id,payload,()=>original(...args));
+   }catch(err){if(err instanceof SmsError){if(err.status===403)throw new ForbiddenError();throw new ValidationError(err.message);}throw err;}
+  };
+ });
+ ctx.on('handler/after/ContestEdit',async(h:any)=>{
+  if(h.context.method!=='GET'||h.response.template!=='contest_edit.html'||!h.tdoc||!['oi','ioi','strictioi','acm'].includes(h.tdoc.rule))return;
+  try {h.response.body.smsEditor=await exams.editor(h.user._id,h.domain._id,String(h.tdoc.docId));}
+  catch(err){if(err instanceof SmsError&&[403,409].includes(err.status))return;throw err;}
+  h.response.addHeader('Cache-Control','private, no-store');
+  h.response.template='sms_contest_edit.html';
+ });
  ctx.on('handler/after/ContestDetail',async(h:any)=>{
   const id=String(h.tdoc?.docId??'');if(!/^[a-f\d]{24}$/i.test(id))return;const e=await exams.exams.findOne({_id:exams.key(h.domain._id,id)});if(!e)return;
   h.response.addHeader('Cache-Control','private, no-store');

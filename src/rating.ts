@@ -1,3 +1,4 @@
+import { syncNativeRated } from './exam-native';
 import { NameService } from './names';
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { RatingEngine, legacySmsRatingEngine } from './rating-engine';
@@ -221,8 +222,9 @@ export class RatingService {
             if (!await this.students.authorization.can(actor, 'rating.configure')) { const current = await this.db.collection('sms_exams').findOne({ _id: `${domainId}:${contestId}` as any }); if (!current) throw new SmsError(403, '没有比赛设置权限'); await this.students.requireAction(actor, 'exams.update', current.classIds); }
             const coll = this.db.collection('sms_rating_contests');
             const prior = await coll.findOne({ _id: `${domainId}:${contestId}` as any });
-            if (prior?.difficulty === difficulty && prior?.enabled === enabled) return old;
+            if (prior?.difficulty === difficulty && prior?.enabled === enabled) {await syncNativeRated(this.db,domainId,contestId,enabled);return old;}
             await this.students.mutation(actor, 'rating.configure', `${domainId}:${contestId}`, ['difficulty', 'enabled'], async () => coll.updateOne({ _id: `${domainId}:${contestId}` as any }, { $set: { domainId, contestId, difficulty, enabled, updatedBy: actor, updatedAt: new Date() }, $inc: { version: 1 }, $unset: { error: '' } }, { upsert: true }));
+            await syncNativeRated(this.db,domainId,contestId,enabled);
             return old;
         });
     }

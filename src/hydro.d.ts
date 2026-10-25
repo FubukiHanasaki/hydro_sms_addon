@@ -48,6 +48,7 @@ export const UserModel: {
 export const TokenModel: { delByUid(uid: number): Promise<unknown> };
 export const Types: { Username: [(value: string) => string, (value: string) => boolean] };
 export class ForbiddenError extends Error {}
+export class ValidationError extends Error {}
 
 export const DomainModel: {
   add(id: string, owner: number, name: string, bulletin: string): Promise<unknown>;
