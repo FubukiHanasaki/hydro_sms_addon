@@ -55,6 +55,7 @@ export const DomainModel: {
   setJoin(id: string, uid: number, join: boolean): Promise<unknown>;
 };
 
-export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; };
+export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getStatus(domainId: string, id: import('mongodb').ObjectId, uid: number): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; };
+export const ProblemModel: { get(domainId: string, pid: number): Promise<any> };
 export const PERM: { PERM_VIEW_RANKING: bigint; PERM_VIEW_CONTEST: bigint; PERM_VIEW_HIDDEN_CONTEST: bigint };
 export const RecordModel: any;

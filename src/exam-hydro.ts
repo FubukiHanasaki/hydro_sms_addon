@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { Context, ContestModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError } from 'hydrooj';
 import { ExamService, EXAM_BRIDGE } from './exams';
 import { SmsError } from './types';
+import { installCorrectionRecords } from './correction-records';
 export function examHost(){return {async contest(actor:number,domain:string,id:string){
  if(!actor||!/^[a-f\d]{24}$/i.test(id))return null;const u=await UserModel.getById(domain,actor);if(!u?.hasPriv(PRIV.PRIV_USER_PROFILE)||!u.hasPerm(PERM.PERM_VIEW_CONTEST))return null;
  let c;try{c=await ContestModel.get(domain,new ObjectId(id));}catch(err){if((err as Error).name==='ContestNotFoundError')return null;throw err;}if(!c||c.domainId!==domain||ContestModel.RULES[c.rule]?.hidden)return null;
@@ -10,6 +11,14 @@ export function examHost(){return {async contest(actor:number,domain:string,id:s
  return c;
 }};}
 export function installExams(ctx:Context,exams:ExamService){
+ installCorrectionRecords(ctx,'smsCorrection',async(h,record,id)=>{
+  await exams.requireReady();
+  await exams.model(h.user._id,h.domain._id,id,'exams.read');
+  if(record.uid===h.user._id&&!await exams.correction(h.user._id,h.domain._id,id))return null;
+  const claim=await ctx.db.db.collection('offline_judge_contests').findOne({_id:`${h.domain._id}:${id}` as any});
+  if(claim&&claim.state!=='complete')return null;
+  return exams.native(h.user._id,{domainId:h.domain._id,contestId:id});
+ });
  ctx.effect(()=>{const bridge={reviewRequired:true,authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
  // Apply the independent module scope to every native contest subpage/API,
  // while retaining all original Hydro checkers and hidden/assign restrictions.
