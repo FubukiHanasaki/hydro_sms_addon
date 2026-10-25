@@ -26,6 +26,7 @@ export function installExams(ctx:Context,exams:ExamService){
   h.response.addHeader('Cache-Control','private, no-store');
   h.response.body.smsExam=await exams.detail(h.user._id,h.domain._id,id);h.response.body.smsExamsApi=h.url('sms_api_exams');
   if(h.response.template==='contest_detail.html')h.response.template='sms_contest_detail.html';
+  else if(h.response.template==='offline_contest_detail.html'&&h.response.body.offlineBaseTemplate==='contest_detail.html')h.response.body.offlineBaseTemplate='sms_contest_detail.html';
  });
  ctx.on('handler/before-prepare/ProblemSubmit',async(h:any)=>{
   const id=String(h.args?.tid??'');if(!/^[a-f\d]{24}$/i.test(id))return;const e=await exams.exams.findOne({_id:exams.key(h.domain._id,id)});if(!e)return;
