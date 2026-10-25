@@ -28,19 +28,36 @@ export class ExamService {
  }
  async list(actor:number,query:unknown={},all=false){
   const q=object(query),page=this.org.page(q.page),pattern=this.org.pattern(text(q.q??'',80,'关键词')),classId=text(q.classId??'',160,'班级');
+  const rated=text(q.rated??'all',16,'Rated 筛选'),settlement=text(q.settlement??'all',16,'结算筛选');
+  if(!['all','rated','unrated'].includes(rated)||!['all','pending','settled','unsettled'].includes(settlement))throw new SmsError(400,'比赛筛选无效');
+  const date=(value:unknown)=>{const v=text(value??'',10,'日期');if(!v)return null;if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||!Number.isFinite(Date.parse(v))||new Date(v).toISOString().slice(0,10)!==v)throw new SmsError(400,'比赛筛选日期无效');return Date.parse(v+'T00:00:00+08:00');};
+  const from=date(q.from),to=date(q.to);if(from!==null&&to!==null&&from>to)throw new SmsError(400,'开始日期不能晚于结束日期');
   const scope=await this.students.authorization.scope(actor,'exams.read');
   const ready=await this.ready();const admin=await this.students.authorization.admin(actor);
   if(!ready)return {initialized:false,admin,total:0,page,pageSize:20,exams:[],difficulties:DIFFICULTIES};
   const filter:any={...scope===null?{}:{classIds:{$in:scope}},archived:q.archived==='true'};
   if(classId)filter.$and=[{classIds:classId}];
   const rows=await this.exams.find(filter).sort({updatedAt:-1}).limit(2001).toArray();if(rows.length>2000)throw new SmsError(400,'请先按班级缩小范围');
-  const visible=[];for(const e of rows){try{const c=await this.native(actor,e);if(!pattern||new RegExp(pattern,'i').test(c.title)||new RegExp(pattern,'i').test(e.examType))visible.push({e,c});}catch(err){if(!(err instanceof SmsError&&err.status===404))throw err;}}
+  const head=await this.rating.head();
+  const configs=await this.db.collection('sms_rating_contests').find({_id:{$in:rows.map(r=>r._id)} as any}).toArray();
+  const sources=await this.rating.sources.find({generation:head.generation,key:{$in:rows.map(r=>`contest:${r._id}`)}}).toArray();
+  const configMap=new Map(configs.map(c=>[String(c._id),c])),sourceMap=new Map(sources.map(s=>[s.key,s]));
+  const visible=[];for(const e of rows){
+   const state=this.ratingState(configMap.get(e._id),sourceMap.get(`contest:${e._id}`));
+   if(rated!=='all'&&(rated==='rated')!==state.rated)continue;
+   if(settlement==='pending'&&!state.reviewPending||settlement==='settled'&&(!state.settled||state.reviewPending)||settlement==='unsettled'&&(state.settled||state.reviewPending))continue;
+   try{const c=await this.native(actor,e);const at=+new Date(c.beginAt);
+    if(from!==null&&at<from||to!==null&&at>=to+86400000)continue;
+    if(!pattern||new RegExp(pattern,'i').test(c.title)||new RegExp(pattern,'i').test(e.examType))visible.push({e,c});
+   }catch(err){if(!(err instanceof SmsError&&err.status===404))throw err;}
+  }
   visible.sort((a,b)=>+new Date(b.c.beginAt)-+new Date(a.c.beginAt));
   return {initialized:true,admin,total:visible.length,page,pageSize:20,exams:await Promise.all((all?visible:visible.slice((page-1)*20,page*20)).map(({e,c})=>this.view(actor,e,c))),difficulties:DIFFICULTIES};
  }
+ private ratingState(config:any,published:any){return {rated:config?.enabled??false,settled:!!published,reviewPending:!!config&&(!!config.enabled!==!!published||(!!published&&((published.review?.configVersion??0)!==(config.version??0)||(published.review?.resultVersion??0)!==(config.resultVersion??0))))};}
  async view(actor:number,e:ExamDoc,c:any){
   const config=await this.db.collection('sms_rating_contests').findOne({_id:e._id as any});const head=await this.rating.head();const published=await this.rating.sources.findOne({generation:head.generation,key:`contest:${e._id}`});
-  return {...e,title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,durationMinutes:Math.round((+new Date(c.endAt)-+new Date(c.beginAt))/60000),fullScore:(c.pids??[]).reduce((sum:number,pid:number)=>sum+(c.score?.[pid]??100),0),problemCount:c.pids?.length??0,rated:config?.enabled??false,difficulty:config?.difficulty??'CSP-J',settled:!!published,reviewedAt:published?.review?.at??null,reviewPending:!!config&&(!!config.enabled!==!!published||(!!published&&((published.review?.configVersion??0)!==(config.version??0)||(published.review?.resultVersion??0)!==(config.resultVersion??0)))),canEdit:await this.allowed(actor,e,'exams.update'),canArchive:await this.allowed(actor,e,'exams.archive'),canReview:await this.students.authorization.admin(actor),canUpload:!!(globalThis as any)[OFFLINE_BRIDGE]&&+new Date(c.endAt)<=Date.now()&&await this.canUpload(actor,e.domainId,e.contestId),url:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}`,uploadUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}#offline-code`};
+  return {...e,title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,durationMinutes:Math.round((+new Date(c.endAt)-+new Date(c.beginAt))/60000),fullScore:(c.pids??[]).reduce((sum:number,pid:number)=>sum+(c.score?.[pid]??100),0),problemCount:c.pids?.length??0,...this.ratingState(config,published),difficulty:config?.difficulty??'CSP-J',reviewedAt:published?.review?.at??null,canEdit:await this.allowed(actor,e,'exams.update'),canArchive:await this.allowed(actor,e,'exams.archive'),canReview:await this.students.authorization.admin(actor),canUpload:!!(globalThis as any)[OFFLINE_BRIDGE]&&+new Date(c.endAt)<=Date.now()&&await this.canUpload(actor,e.domainId,e.contestId),url:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}`,uploadUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}#offline-code`};
  }
  async detail(actor:number,domain:unknown,id:unknown){const e=await this.model(actor,domain,id);return this.view(actor,e,await this.native(actor,e));}
  async candidates(actor:number,domainValue:unknown){

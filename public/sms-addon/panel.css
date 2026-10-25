@@ -427,3 +427,15 @@
 .sms-exam-rated-badge.is-unrated { color: #333; background: #f5f6f7; border-color: #dce1e5; font-weight: 400; }
 
 @media (max-width:767px) { .sms-exam-dialog { width: calc(100vw - 16px); } .sms-exam-dialog .sms-form-grid { grid-template-columns: minmax(0,1fr); } .sms-exam-dialog .sms-dialog-footer { flex-wrap: wrap; } }
+
+.sms-exam-filters { display: grid; grid-template-columns: minmax(160px,1.4fr) repeat(4,minmax(110px,1fr)); align-items: end; gap: 10px; }
+.sms-exam-filters > .textbox,.sms-exam-filters > .select { width: 100%; }
+.sms-exam-date { display: flex; align-items: center; gap: 8px; white-space: nowrap; grid-column: span 2; margin: 0; }
+.sms-exam-date .textbox { min-width: 0; width: 100%; height: 36px; box-sizing: border-box; margin: 0; }
+.sms-exam-filter-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.sms-exam-filter-actions .button { margin: 0; height: 36px; white-space: nowrap; }
+.sms-rating-preview { min-width: 880px; }
+.sms-rating-preview-delta { font-weight: 700; white-space: nowrap; }
+.sms-rating-preview-delta.is-up { color: #16834a; }
+.sms-rating-preview-delta.is-down { color: #c0392b; }
+@media(max-width:767px) { .sms-exam-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } .sms-exam-date { grid-column: auto; flex-direction: column; align-items: stretch; gap: 4px; } .sms-exam-filter-actions { grid-column: 1 / -1; } }

@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/sms-addon/panel.css?v=rated-badge-compact-20261025">
+<link rel="stylesheet" href="/sms-addon/panel.css?v=exam-review-filters-20261025">
 <div id="sms-app" class="sms-shell row" data-exams="{{ smsExams }}" data-home-domains="{{ url('home_domain') }}" data-api="{{ smsApi }}" data-me="{{ smsMe }}" data-permissions="{{ smsPermissions }}" data-audit="{{ smsAudit }}" data-users="{{ smsUsers }}" data-filters="{{ smsFilters }}" data-domains="{{ smsDomains }}" data-classes="{{ smsClasses }}" data-accounts="{{ smsAccounts }}" data-rating="{{ smsRating }}" data-rating-history="{{ smsRatingHistory }}" data-rating-import="{{ smsRatingImport }}" data-rating-contests="{{ smsRatingContests }}">
   <div class="medium-9 columns sms-main">
     <div class="typo"><blockquote id="sms-notice" class="sms-notice" role="status" aria-live="polite" hidden></blockquote></div>
@@ -40,7 +40,7 @@
     </section>
     <section id="sms-exams-section" class="section visible" hidden>
       <div class="section__header"><h1 class="section__title">模拟赛管理</h1><div class="section__tools" id="sms-exam-tools"></div></div>
-      <div class="section__body"><form id="sms-exam-search" class="sms-org-toolbar"><input id="sms-exam-query" class="textbox" type="search" placeholder="比赛名称、类型" aria-label="搜索模拟赛"><select id="sms-exam-class" class="select" aria-label="参赛班级"><option value="">全部班级</option></select><select id="sms-exam-archived" class="select" aria-label="归档状态"><option value="false">进行管理</option><option value="true">已归档</option></select><button class="rounded button" type="submit">查询</button></form><p id="sms-exam-summary" class="help-text"></p><div id="sms-exam-setup"></div></div>
+      <div class="section__body"><form id="sms-exam-search" class="sms-org-toolbar sms-exam-filters"><input id="sms-exam-query" class="textbox" type="search" placeholder="比赛名称、类型" aria-label="搜索模拟赛"><select id="sms-exam-class" class="select" aria-label="参赛班级"><option value="">全部班级</option></select><select id="sms-exam-archived" class="select" aria-label="归档状态"><option value="false">进行管理</option><option value="true">已归档</option></select><select id="sms-exam-rated" class="select" aria-label="Rated 状态"><option value="all">全部计分状态</option><option value="rated">Rated</option><option value="unrated">Unrated</option></select><select id="sms-exam-settlement" class="select" aria-label="结算状态"><option value="all">全部结算状态</option><option value="pending">待核验</option><option value="settled">已结算</option><option value="unsettled">未结算</option></select><label class="sms-exam-date">开始日期<input id="sms-exam-from" class="textbox" type="date" aria-label="比赛开始日期起点"></label><label class="sms-exam-date">结束日期<input id="sms-exam-to" class="textbox" type="date" aria-label="比赛开始日期终点"></label><div class="sms-exam-filter-actions"><button class="rounded button" type="submit">查询</button><button class="rounded button" type="button" id="sms-exam-reset">重置</button></div></form><p id="sms-exam-summary" class="help-text"></p><div id="sms-exam-setup"></div></div>
       <div class="section__body no-padding sms-table-scroll"><table class="sms-bulk-table sms-exam-table"><thead><tr><th>模拟赛</th><th>班级 / 赛制</th><th>难度 / Rated</th><th>时间 / 结算</th><th>操作</th></tr></thead><tbody id="sms-exam-rows"></tbody></table></div>
       <div class="section__body sms-pagination"><span id="sms-exam-page"></span><div><button class="rounded button" type="button" id="sms-exam-prev">上一页</button><button class="rounded button" type="button" id="sms-exam-next">下一页</button></div></div>
     </section>
@@ -110,7 +110,7 @@
 </div>
 <script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
 <script src="/sms-addon/panel.js?build=exams-20261025" defer></script>
-<script src="/sms-addon/exams.js?v=rated-badge-20261025" defer></script>
+<script src="/sms-addon/exams.js?v=exam-review-filters-20261025" defer></script>
 <script src="/sms-addon/organization.js?v=teacher-members-20261025" defer></script>
 <script src="/sms-addon/accounts.js?build=academic-auth-20261021" defer></script>
 <link rel="stylesheet" href="/sms-addon/rating.css?build=nav-width-stable-20261021">

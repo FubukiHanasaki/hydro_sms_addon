@@ -95,6 +95,28 @@ export class RatingService {
     }
     async head() { return (await this.heads.findOne({ _id: 'global' }))!; }
     async allSources(generation: string) { return (await this.sources.find({ generation }).toArray()).map(({ _id, generation, ...s }) => s); }
+    private replay(sources: RatingSource[], generation: string) {
+        const states = new Map<number, RatingState>(), changes: Change[] = [], summaries = new Map<number, Summary>();
+        const ordered = [...sources].sort((a, b) => a.at.localeCompare(b.at) || (a.kind === b.kind ? a.key.localeCompare(b.key) : a.kind === 'import' ? -1 : 1));
+        for (const s of ordered) {
+            if (s.kind === 'import') {
+                const before = states.get(s.uid!)?.rating ?? s.rating!;
+                states.set(s.uid!, { rating: s.rating!, contests: Math.max(1, states.get(s.uid!)?.contests ?? 0) });
+                changes.push({ _id: `${generation}:${s.key}`, generation, uid: s.uid!, source: s.key, kind: 'import', at: s.at, title: '历史导入', before, after: s.rating!, delta: round(s.rating! - before, 2), rank: null, participants: null });
+            }
+            else {
+                for (const c of this.engine.calculate(s.participants ?? [], states, s.difficulty!, !!s.penalty)) {
+                    states.set(c.uid, { rating: c.after, contests: c.contests });
+                    changes.push({ _id: `${generation}:${s.key}:${c.uid}`, generation, uid: c.uid, source: s.key, kind: 'contest', at: s.at, title: s.title || '比赛', difficulty: s.difficulty, before: c.before, after: c.after, delta: c.delta, rank: c.rank, participants: c.participants, factor: c.factor });
+                }
+            }
+        }
+        for (const c of changes) {
+            const prev = summaries.get(c.uid);
+            summaries.set(c.uid, { _id: `${generation}:${c.uid}`, generation, uid: c.uid, rating: c.after, contests: (prev?.contests ?? 0) + (c.kind === 'contest' ? 1 : 0), peak: Math.max(prev?.peak ?? 0, c.after), records: (prev?.records ?? 0) + 1, updatedAt: c.at });
+        }
+        return { changes, summaries };
+    }
     // Full immutable generations keep readers on the last complete result even on
     // standalone MongoDB. Publish sources, summaries and history with one CAS.
     async mutate(actor: number, action: string, work: (sources: RatingSource[]) => Promise<RatingSource[]>, expected?: number) {
@@ -109,25 +131,8 @@ export class RatingService {
             if (head.engine === this.engine.id && JSON.stringify(old) === JSON.stringify(next))
                 return { revision: head.revision, changed: false };
             return await this.students.mutation(actor, action, 'rating', [], async () => {
-                const generation = randomUUID(), states = new Map<number, RatingState>(), changes: Change[] = [], summaries = new Map<number, Summary>();
-                const ordered = [...next].sort((a, b) => a.at.localeCompare(b.at) || (a.kind === b.kind ? a.key.localeCompare(b.key) : a.kind === 'import' ? -1 : 1));
-                for (const s of ordered) {
-                    if (s.kind === 'import') {
-                        const before = states.get(s.uid!)?.rating ?? s.rating!;
-                        states.set(s.uid!, { rating: s.rating!, contests: Math.max(1, states.get(s.uid!)?.contests ?? 0) });
-                        changes.push({ _id: `${generation}:${s.key}`, generation, uid: s.uid!, source: s.key, kind: 'import', at: s.at, title: '历史导入', before, after: s.rating!, delta: round(s.rating! - before, 2), rank: null, participants: null });
-                    }
-                    else {
-                        for (const c of this.engine.calculate(s.participants ?? [], states, s.difficulty!, !!s.penalty)) {
-                            states.set(c.uid, { rating: c.after, contests: c.contests });
-                            changes.push({ _id: `${generation}:${s.key}:${c.uid}`, generation, uid: c.uid, source: s.key, kind: 'contest', at: s.at, title: s.title || '比赛', difficulty: s.difficulty, before: c.before, after: c.after, delta: c.delta, rank: c.rank, participants: c.participants, factor: c.factor });
-                        }
-                    }
-                }
-                for (const c of changes) {
-                    const prev = summaries.get(c.uid);
-                    summaries.set(c.uid, { _id: `${generation}:${c.uid}`, generation, uid: c.uid, rating: c.after, contests: (prev?.contests ?? 0) + (c.kind === 'contest' ? 1 : 0), peak: Math.max(prev?.peak ?? 0, c.after), records: (prev?.records ?? 0) + 1, updatedAt: c.at });
-                }
+                const generation = randomUUID();
+                const { changes, summaries } = this.replay(next, generation);
                 if (next.length)
                     await this.sources.insertMany(next.map(s => ({ ...s, _id: `${generation}:${s.key}`, generation })));
                 changes.forEach((change, index) => { change.order = index; });
@@ -233,14 +238,34 @@ export class RatingService {
         const head = await this.head(); const id = randomUUID();
         const hash = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
         await this.db.collection('sms_rating_reviews').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-        await this.db.collection('sms_rating_reviews').insertOne({ _id: id as any, actor, domainId, contestId, version: config.version ?? 0, revision: head.revision, enabled: config.enabled, resultVersion: config.resultVersion ?? 0, hash, state: 'preview', expiresAt: new Date(Date.now() + 900000) });
-        return { id, revision: head.revision, enabled: config.enabled, title: snapshot.title, difficulty: snapshot.difficulty, at: snapshot.at, participants: snapshot.participants ?? [], expiresIn: 900 };
+        const old = await this.allSources(head.generation), next = old.filter(s => s.key !== snapshot.key);
+        if (config.enabled) next.push(snapshot);
+        const projected = this.replay(next, 'preview');
+        const current = await this.summaries.find({ generation: head.generation }).toArray();
+        const currentByUid = new Map(current.map(s => [s.uid, s]));
+        const changes = new Map(projected.changes.filter(c => c.source === snapshot.key).map(c => [c.uid, c]));
+        const previous = old.find(s => s.key === snapshot.key);
+        const uids = [...new Set([...(snapshot.participants ?? []).map(p => p.uid), ...(!config.enabled ? (previous?.participants ?? []).map(p => p.uid) : [])])];
+        const accounts = await this.db.collection<{_id:number;uname?:string;displayName?:string}>('user').find({ _id: { $in: uids } }, { projection: { _id: 1, uname: 1, displayName: 1 } }).toArray();
+        const students = await this.students.students.find({ hydroUid: { $in: uids } }, { projection: { hydroUid: 1, 'basic.name': 1 } }).toArray();
+        const predictions = uids.map(uid => {
+            const change = changes.get(uid), before = config.enabled ? change?.before ?? null : currentByUid.get(uid)?.rating ?? 0;
+            const after = config.enabled ? change?.after ?? null : projected.summaries.get(uid)?.rating ?? 0;
+            const account = accounts.find(a => a._id === uid), student = students.find(s => s.hydroUid === uid);
+            return { uid, username: account?.uname ?? '', name: student?.basic?.name || account?.displayName || account?.uname || `UID ${uid}`, before, after,
+                delta: before === null || after === null ? null : round(after - before, 2),
+                beforeTitle: before === null ? '' : ratingTitle(before, config.enabled || !!currentByUid.get(uid)).title,
+                afterTitle: after === null ? '' : ratingTitle(after, config.enabled || projected.summaries.has(uid)).title };
+        });
+        if ((await this.head()).revision !== head.revision) throw new SmsError(409, 'Rating 已更新，请重新预览');
+        await this.db.collection('sms_rating_reviews').insertOne({ _id: id as any, actor, domainId, contestId, version: config.version ?? 0, revision: head.revision, enabled: config.enabled, engine: this.engine.id, resultVersion: config.resultVersion ?? 0, hash, state: 'preview', expiresAt: new Date(Date.now() + 900000) });
+        return { id, revision: head.revision, enabled: config.enabled, title: snapshot.title, difficulty: snapshot.difficulty, at: snapshot.at, participants: snapshot.participants ?? [], predictions, expiresIn: 900 };
     }
     async reviewConfirm(actor: number, reviewId: string) {
         await this.students.authorization.requireAdmin(actor);
         const reviews = this.db.collection('sms_rating_reviews');
         const preview = await reviews.findOne({ _id: reviewId as any, actor });
-        if (!preview || preview.state !== 'preview' || preview.expiresAt <= new Date()) throw new SmsError(409, '核验预览已失效，请重新核验');
+        if (!preview || preview.engine !== this.engine.id || preview.state !== 'preview' || preview.expiresAt <= new Date()) throw new SmsError(409, '核验预览已失效，请重新核验');
         const claimed = await reviews.updateOne({ _id: reviewId as any, actor, state: 'preview', expiresAt: { $gt: new Date() } }, { $set: { state: 'confirming' } });
         if (!claimed.modifiedCount) throw new SmsError(409, '核验正在执行或已完成');
         try {
