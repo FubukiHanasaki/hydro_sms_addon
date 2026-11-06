@@ -39,6 +39,9 @@ export class OrganizationService {
     for await (const user of missing) await this.host.join('system', user._id, true);
   }
   async metadata(id: string) { return this.classes.findOne({ $or: [{ _id: id }, { domainId: id }] }); }
+  // Hydro preserves the original _id and uses its unique lower index for aliases.
+  // Return that stored identity; never use an alias as a foreign key or scope.
+  private async storedDomain(id: string) { return await this.domains.findOne({ _id: id }) ?? this.domains.findOne({ lower: id.toLowerCase() }); }
   async domain(id: string) { const row = await this.domains.findOne({ _id: id }); if (!row) throw new SmsError(404, '班级与子域不存在'); return row; }
   async joined(id: string, uid: number) { return !!await this.db.collection('domain.user').findOne({ domainId: id, uid, join: true }); }
   async access(uid: number, domain: DomainDoc, metadata: ClassDoc | null) {
@@ -118,19 +121,25 @@ export class OrganizationService {
   async classSave(uid: number, id: string | null, value: unknown) {
     const input = object(value);
     this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain']);
-    const domainId = text(input.domainId, 64, '子域 ID').toLowerCase();
-    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(domainId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
+    const requestedId = text(input.domainId, 64, '子域 ID');
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(requestedId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
     const name = text(input.name, 100, '名称'); const description = text(input.description ?? '', 5000, '说明');
     const data = { type: text(input.type ?? '', 80, '班型'), academicYear: text(input.academicYear ?? '', 80, '学年'), schedule: text(input.schedule ?? '', 200, '上课安排'), location: text(input.location ?? '', 200, '地点'), status: input.status as ClassDoc['status'] };
     if (!name || !['active', 'archived'].includes(data.status)) throw new SmsError(400, '请填写名称并选择有效状态');
     if (input.createDomain !== undefined && typeof input.createDomain !== 'boolean') throw new SmsError(400, '创建标识无效');
     const version = input.version ?? 0; if (!Number.isSafeInteger(version) || (version as number) < 0) throw new SmsError(400, '版本无效');
+    const stored = await this.storedDomain(requestedId);
+    // New IDs keep the existing lowercase creation policy. Existing IDs, even
+    // when submitted through a lowercase URL, must retain their stored spelling.
+    const domainId = stored?._id ?? (input.createDomain ? requestedId.toLowerCase() : requestedId);
+    const routeMetadata = id ? await this.metadata(id) : null;
+    const routeDomain = id ? await this.storedDomain(routeMetadata?.domainId || id) : null;
     return this.locked(domainId, async verify => {
-      const previous = await this.metadata(id || domainId);
+      const previous = await this.metadata(routeMetadata?._id || domainId);
       await this.students.requireAction(uid, input.createDomain ? 'classes.create' : 'classes.update', input.createDomain ? [] : [domainId]);if(input.createDomain)await this.students.requireAction(uid,'classes.read');
       if(previous && previous.status!==data.status) await this.students.requireAction(uid,'classes.archive',[domainId]);
       if (previous && previous.domainId !== domainId) throw new SmsError(400, '不能修改已关联的子域 ID');
-      if (id && !previous && id !== domainId) throw new SmsError(404, '班级与子域不存在');
+      if (id && (routeMetadata ? routeMetadata.domainId !== domainId : routeDomain?._id !== domainId)) throw new SmsError(404, '班级与子域不存在');
       const domain = await this.domains.findOne({ _id: domainId });
       const recoverCreation = !domain && input.createDomain && version === 0 && previous?.syncState !== 'ready';
       if ((previous?.version ?? 0) !== version && !recoverCreation) throw new SmsError(409, '资料已更新，请重新打开后修改');
@@ -151,7 +160,8 @@ export class OrganizationService {
   async domainSave(uid: number, value: unknown) {
     const input = object(value); this.fields(input, ['action', 'id', 'name', 'bulletin', 'version']);
     if (!['create', 'update'].includes(String(input.action))) throw new SmsError(400, '操作无效');
-    const id = text(input.id, 64, '子域 ID').toLowerCase(); const meta = await this.metadata(id);
+    const requestedId = text(input.id, 64, '子域 ID');
+    const id = (await this.storedDomain(requestedId))?._id ?? requestedId; const meta = await this.metadata(id);
     // Compatibility endpoint uses the same save path; updates require a revision.
     if (input.action === 'update' && input.version === undefined) throw new SmsError(400, '更新需要版本号');
     return this.classSave(uid, input.action === 'create' ? null : id, { domainId: id, name: input.name, description: input.bulletin, type: meta?.type || '', academicYear: meta?.academicYear || '', schedule: meta?.schedule || '', location: meta?.location || '', status: meta?.status || 'active', version: input.version ?? 0, createDomain: input.action === 'create' });
