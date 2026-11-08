@@ -39,7 +39,8 @@ export class AuthorizationService {
  async admin(uid:number){return uid>0&&(await this.policy()).admins.includes(uid);}
  async requireAdmin(uid:number){if(!await this.admin(uid))throw new SmsError(403,'需要插件管理员授权');}
  catalog(){return Object.entries(MODULES).map(([id,[label,actions]])=>({id,label,actions:Object.entries(actions).map(([a,label])=>({code:`${id}.${a}`,label,globalOnly:GLOBAL_ONLY.has(`${id}.${a}`)}))}));}
- async teaching(uid:number){const taught=await this.db.collection('sms_classes').distinct('domainId',{teacherUids:uid});return this.db.collection('domain.user').distinct('domainId',{domainId:{$in:taught},uid,join:true});}
+ async departed(uid:number){return !!await this.db.collection('sms_teachers').findOne({hydroUid:uid,'basic.status':'离职'},{projection:{_id:1}});}
+ async teaching(uid:number){if(await this.departed(uid))return [];const taught=await this.db.collection('sms_classes').distinct('domainId',{teacherUids:uid});return this.db.collection('domain.user').distinct('domainId',{domainId:{$in:taught},uid,join:true});}
  // A Hydro membership is independent of student/teacher profile binding.
  // Member-scoped rules grant only the ordinary read scope; fullRead and the
  // student/sensitive-data policies remain separate authorization decisions.
@@ -47,10 +48,11 @@ export class AuthorizationService {
   if(!Number.isSafeInteger(uid)||uid<=0)return [];
   return this.db.collection('domain.user').distinct('domainId',{uid,join:true});
  }
- async scope(uid:number,code:string,config?:Config,knownAdmin?:boolean):Promise<string[]|null>{
+ async scope(uid:number,code:string,config?:Config,knownAdmin?:boolean,knownDeparted?:boolean):Promise<string[]|null>{
   if(uid<=0||!CODES.includes(code))return [];
   if(knownAdmin??await this.admin(uid))return null;
   const c=config??await this.config(),binding=c.bindings.find(b=>b.uid===uid),template=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
+  if(knownDeparted??await this.departed(uid))return ['legacy','self'].includes(template?.id??'')&&['classes.read','schedules.read','courses.read','exams.read'].includes(code)?this.members(uid):[];
   let base=template?.rules[code];
   if(template?.id==='legacy'){
    if(['exams.read','classes.read','schedules.read','courses.read','classes.export','schedules.export','courses.export','reports.export'].includes(code))base='member';
@@ -64,7 +66,7 @@ export class AuthorizationService {
   return [...ids];
  }
  async fullRead(uid:number,id:string){
-  if(await this.admin(uid))return true;const c=await this.config(),binding=c.bindings.find(b=>b.uid===uid),t=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
+  if(await this.admin(uid))return true;if(await this.departed(uid))return false;const c=await this.config(),binding=c.bindings.find(b=>b.uid===uid),t=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
   if(t?.id==='legacy'&&(await this.teaching(uid)).includes(id))return true;
   for(const code of ['classes.read','courses.read','reports.read','courses.create','courses.update','classes.members']){
    if(t?.rules[code]&&t.rules[code]!=='member'&&await this.can(uid,code,[id]))return true;
@@ -73,7 +75,7 @@ export class AuthorizationService {
  }
  async can(uid:number,code:string,classIds?:string[]){const ids=await this.scope(uid,code);return ids===null||!!(classIds?.length?classIds.every(id=>ids.includes(id)):classIds?false:ids.length);}
  async require(uid:number,code:string,classIds:string[]=[]){if(!await this.can(uid,code,classIds)){await this.db.collection('sms_audit').insertOne({uid,action:'authorization.denied',target:code,fields:classIds,at:new Date(),outcome:'denied'});throw new SmsError(403,`没有对应操作权限或超出班级范围：${code}`);}}
- async snapshot(uid:number){const c=await this.config(),admin=await this.admin(uid),scopes:Record<string,string[]|null>=Object.fromEntries(await Promise.all(CODES.map(async code=>[code,await this.scope(uid,code,c,admin)])));return {catalog:this.catalog(),classes:(await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).toArray()).filter(d=>admin||Object.entries(scopes).some(([code,ids])=>!GLOBAL_ONLY.has(code)&&(ids===null||ids.includes(String(d._id))))).map(d=>({id:String(d._id),name:d.name||String(d._id)})),legacyGrants:(await this.policy()).grants.filter(g=>g.uid===uid&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())),templateName:[...BUILTINS,...c.templates].find(t=>t.id===(c.bindings.find(b=>b.uid===uid)?.templateId??'legacy'))?.name,admin,revision:c.revision,templateId:c.bindings.find(b=>b.uid===uid)?.templateId??'legacy',scopes,capabilities:Object.fromEntries(Object.entries(scopes).map(([code,ids])=>[code,ids===null||!!ids.length]))};}
+ async snapshot(uid:number){const c=await this.config(),admin=await this.admin(uid),departed=await this.departed(uid),scopes:Record<string,string[]|null>=Object.fromEntries(await Promise.all(CODES.map(async code=>[code,await this.scope(uid,code,c,admin,departed)])));return {catalog:this.catalog(),classes:(await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).toArray()).filter(d=>admin||Object.entries(scopes).some(([code,ids])=>!GLOBAL_ONLY.has(code)&&(ids===null||ids.includes(String(d._id))))).map(d=>({id:String(d._id),name:d.name||String(d._id)})),legacyGrants:(await this.policy()).grants.filter(g=>(admin||!departed)&&g.uid===uid&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())),templateName:[...BUILTINS,...c.templates].find(t=>t.id===(c.bindings.find(b=>b.uid===uid)?.templateId??'legacy'))?.name,admin,revision:c.revision,templateId:c.bindings.find(b=>b.uid===uid)?.templateId??'legacy',scopes,capabilities:Object.fromEntries(Object.entries(scopes).map(([code,ids])=>[code,ids===null||!!ids.length]))};}
  async searchAccounts(actor:number,query:unknown){
   await this.requireAdmin(actor);
   const q=text(query??'',80,'账号搜索词');if(!q)return [];
@@ -93,6 +95,7 @@ export class AuthorizationService {
   const unknown=Object.keys(b).filter(k=>!['revision','action','uid','templateId','name','rules','permissions','classIds','startsAt','expiresAt','reason','id'].includes(k));if(unknown.length)throw new SmsError(400,'授权包含未知字段');
   const action=text(b.action,30,'操作'),target=action==='template'?0:positiveInt(b.uid,'Hydro UID');
   if(target){if(!await this.db.collection('user').findOne({_id:target as never}))throw new SmsError(400,'账号不存在');if((await this.policy()).admins.includes(target))throw new SmsError(400,'插件管理员由服务器 CLI 维护');}
+  if(target&&await this.departed(target)&&(action==='grant'||action==='bind'&&b.templateId!=='none'))throw new SmsError(400,'请先办理教师复职，再重新授权');
   if(action==='bind'){
    const templateId=text(b.templateId,80,'权限模板');if(![...BUILTINS,...c.templates].some(t=>t.id===templateId))throw new SmsError(400,'权限模板不存在');
    c.bindings=c.bindings.filter(v=>v.uid!==target);if(templateId!=='legacy')c.bindings.push({uid:target,templateId});

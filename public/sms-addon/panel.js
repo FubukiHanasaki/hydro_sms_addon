@@ -38,7 +38,7 @@
     });
     let result;
     try { result = await response.json(); } catch { throw new Error('服务响应异常，请刷新页面后重试'); }
-    if (!response.ok) throw new Error(result.message || (response.status === 403 ? '登录已失效或没有访问权限，请重新登录后重试' : '操作未完成，请稍后重试'));
+    if(response.status===403)globalThis.SmsRefreshIdentity?.();if (!response.ok) throw new Error(result.message || (response.status === 403 ? '登录已失效或没有访问权限，请重新登录后重试' : '操作未完成，请稍后重试'));
     if (!Object.hasOwn(result, 'data')) throw new Error('服务响应格式异常');
     return result.data;
   }
@@ -61,6 +61,7 @@
     fill('sms-domain', '全部子域', filters.domains.map((domain) => [domain.id, `${domain.name}（${domain.id}）`]));
   }
   async function loadStudents() {
+    state.page=SmsUI.list('students',state.page,{q:$('sms-search'),status:$('sms-status'),grade:$('sms-grade'),domain:$('sms-domain'),school:$('sms-school')});
     const request = ++state.request;
     $('sms-prev').disabled = $('sms-next').disabled = true;
     $('sms-summary').textContent = '正在加载…';
@@ -212,7 +213,7 @@
     $('sms-save-student').disabled = true;
     try {
       const result = await api(student ? `${app.dataset.api}/${encodeURIComponent(student.id)}` : app.dataset.api, body);
-      $('sms-student-dialog').close();
+      SmsUI.saved($('sms-student-dialog'));$('sms-student-dialog').close();
       notice(result.generatedAccount ? `学生已创建。Hydro 用户名：${result.generatedAccount.username}，初始密码：${result.generatedAccount.username}，UID：${result.generatedAccount.uid}。` : student ? '学生资料已保存。' : '学生档案已创建。');
       await loadFilterOptions();
       await loadStudents();
@@ -295,8 +296,11 @@
     }
     if (!records.length) { const row = element('tr'); const cell = element('td', '', '暂无操作记录'); cell.colSpan = 5; row.append(cell); rows.append(row); }
   }
-  async function switchTab(tab) {
+  async function switchTab(tab,fromHistory=false) {
+    const tabs=['students','permissions','audit','organization','exams','accounts','rating','courses','schedules','teachers','academic'];if(!tabs.includes(tab))tab='students';
     const required={exams:'exams.read',accounts:'accounts.read',academic:'reports.read',audit:'audit.read'};if(tab==='permissions'&&!state.me.admin||required[tab]&&!state.me.capabilities[required[tab]]){notice('没有此功能的访问权限',true);return;}
+    if(!fromHistory&&!SmsUI.navigate(tab))return;
+    globalThis.SmsRefreshIdentity?.();
     state.tab = tab; notice('');
     for (const name of ['students', 'permissions', 'audit', 'organization', 'exams', 'accounts', 'rating', 'courses', 'schedules', 'teachers', 'academic']) $(`sms-${name}-section`).hidden = name !== tab;
     document.querySelectorAll('.sms-nav').forEach((button) => button.classList.toggle('active', button.dataset.tab === tab));
@@ -318,14 +322,18 @@
   let scopeTimer; $('sms-scope-search').addEventListener('input', () => { clearTimeout(scopeTimer); scopeTimer = setTimeout(() => loadScope().catch((error) => notice(error.message, true)), 250); });
   $('sms-refresh-audit').addEventListener('click', () => loadAudit().catch((error) => notice(error.message, true)));
   document.querySelectorAll('.sms-nav').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
-  window.addEventListener('hashchange', () => { if (state.me && ['domains', 'classes', 'organization','exams'].includes(location.hash.slice(1))) switchTab(location.hash === '#exams'?'exams':'organization'); });
-  window.addEventListener('hashchange', () => { if (state.me && ['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) switchTab(location.hash.slice(1)); });
+  const route=()=>{if(state.me)switchTab(['domains','classes'].includes(location.hash.slice(1))?'organization':location.hash.slice(1)||'students',true);};
+  app.addEventListener('sms:route',route);
+  let identityRequest=null,lastIdentityCheck=0,authoritySignature;
+  const signature=me=>JSON.stringify([me.uid,me.admin,me.teacher,me.templateId,me.capabilities,Object.fromEntries(Object.entries(me.scopes).map(([code,ids])=>[code,ids===null?null:[...ids].sort()])),me.grants,me.classes.map(c=>c.id).sort(),me.boundStudentId,me.teacherProfileId]);
+  async function refreshIdentity(){if(!app.isConnected||app.hidden||!state.me||document.hidden||identityRequest||Date.now()-lastIdentityCheck<2000)return identityRequest;lastIdentityCheck=Date.now();identityRequest=(async()=>{try{const response=await fetch(app.dataset.me,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});if(response.status===403){SmsUI.authorityChanged();return;}if(!response.ok)return;const result=await response.json();if(!result.data)return;if(signature(result.data)!==authoritySignature){state.request++;SmsUI.authorityChanged();}}catch{/* Keep transient network failures distinct from revoked access. */}finally{identityRequest=null;}})();return identityRequest;}
+  globalThis.SmsRefreshIdentity=refreshIdentity;window.addEventListener('focus',refreshIdentity);window.addEventListener('pageshow',refreshIdentity);document.addEventListener('visibilitychange',refreshIdentity);setInterval(refreshIdentity,30000);
   (async () => {
     try {
-      state.me = await api(app.dataset.me);
-      $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.templateId!=='legacy' ? state.me.templateName : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
+      state.me = await api(app.dataset.me);authoritySignature=signature(state.me);lastIdentityCheck=Date.now();
+      $('sms-identity').textContent = `UID ${state.me.uid} · ${state.me.admin ? '插件管理员' : state.me.templateId!=='legacy' ? state.me.templateName : state.me.teacher ? '任课教师' : state.me.grants.length ? '已授权用户' : state.me.boundStudentId ? '学生本人' : 'Hydro 用户'}`;
       $('sms-accounts-nav').hidden = !state.me.capabilities['accounts.read'];
-      document.querySelector('[data-tab=teachers]').hidden=!state.me.teacher&&!state.me.capabilities['teachers.read'];
+      document.querySelector('[data-tab=teachers]').hidden=!state.me.teacher&&!state.me.teacherProfileId&&!state.me.capabilities['teachers.read'];
       $('sms-academic-nav').hidden = !state.me.capabilities['reports.read'];
       $('sms-audit-nav').hidden = !state.me.capabilities['audit.read'];
       $('sms-create').hidden = !state.me.capabilities['students.create'];$('sms-permissions-nav').hidden = !state.me.admin;
@@ -333,8 +341,7 @@
       app.dispatchEvent(new CustomEvent('sms:ready', { detail: state.me }));
       await loadFilterOptions();
       await loadStudents();
-      if (['#accounts', '#rating', '#courses', '#schedules', '#teachers', '#academic', '#permissions'].includes(location.hash)) await switchTab(location.hash.slice(1));
-      if (['domains', 'classes', 'organization','exams'].includes(location.hash.slice(1))) await switchTab(location.hash === '#exams'?'exams':'organization');
+      await route();
     } catch (error) { notice(error.message, true); $('sms-identity').textContent = '无法确认访问权限'; $('sms-summary').textContent = '请确认登录状态后刷新页面'; }
   })();
 })();

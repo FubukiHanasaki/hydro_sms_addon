@@ -25,14 +25,14 @@
     const url = new URL(app.dataset.homeDomains, location.origin); url.searchParams.set('sms_domains', '1');
     try {
       const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'text/html' } });
-      if (!response.ok) throw new Error('无法读取我的子域，请确认登录状态');
+      if(response.status===403)globalThis.SmsRefreshIdentity?.();if (!response.ok) throw new Error('无法读取我的子域，请确认登录状态');
       const parsed = new DOMParser().parseFromString(await response.text(), 'text/html'); const list = parsed.getElementById('sms-native-domain-list');
       if (!list) throw new Error('服务响应异常，请刷新后重试');
       if (current === domainRequest) root.replaceChildren(document.importNode(list, true));
     } catch (e) { if (current === domainRequest) { root.replaceChildren(); error(e); } }
   }
   for (const view of ['classes', 'domains']) {
-    $(`sms-org-tab-${view}`).addEventListener('click', () => { history.replaceState(null, '', view === 'domains' ? '#domains' : '#organization'); organizationView(view).catch(error); });
+    $(`sms-org-tab-${view}`).addEventListener('click', () => { if(SmsUI.navigate(view==='domains'?'domains':'organization'))organizationView(view).catch(error); });
     $(`sms-org-tab-${view}`).addEventListener('keydown', e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 'classes' : e.key === 'End' ? 'domains' : view === 'classes' ? 'domains' : 'classes'; $(`sms-org-tab-${next}`).focus(); $(`sms-org-tab-${next}`).click(); } });
   }
   // Submit to Hydro's original personal-favorite operation, preserving native
@@ -43,11 +43,11 @@
     try {
       const url = new URL(form.action, location.origin); if (url.origin !== location.origin) throw new Error('收藏地址无效');
       const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: new URLSearchParams(new FormData(form)) });
-      const result = await response.json(); if (!response.ok || typeof result.star !== 'boolean') throw new Error('收藏未完成，请刷新后重试');
+      if(response.status===403)globalThis.SmsRefreshIdentity?.();const result = await response.json(); if (!response.ok || typeof result.star !== 'boolean') throw new Error('收藏未完成，请刷新后重试');
       form.elements.star.value = String(!result.star); node.classList.toggle('activated', result.star); node.setAttribute('aria-pressed', String(result.star)); node.setAttribute('aria-label', result.star ? '取消收藏' : '收藏'); node.querySelector('.icon').className = `icon icon-star${result.star ? '' : '--outline'}`;
     } catch (e) { error(e); } finally { node.disabled = false; }
   });
-  async function loadClasses() {
+  async function loadClasses() {page=SmsUI.list('organization',page,{q:$('sms-class-query'),status:$('sms-class-status')});
     const serial = ++request; const url = new URL(app.dataset.classes, location.origin);
     url.search = new URLSearchParams({ q: $('sms-class-query').value, status: $('sms-class-status').value, page });
     const result = await api(url); if (serial !== request) return;
@@ -88,7 +88,7 @@
     inputs.status = field(grid, 'class-lifecycle', '状态', c?.status || 'active', [['active', '开班中'], ['archived', '已归档']]);
     if(c&&me.scopes['classes.archive']!==null&&!me.scopes['classes.archive'].includes(c.domainId))inputs.status.disabled=true;
     const label = el('label', 'sms-field', '说明 / 子域公告'); inputs.description = el('textarea', 'textbox'); inputs.description.id = 'sms-org-description'; inputs.description.value = c?.description || ''; inputs.description.maxLength = 5000; label.append(inputs.description); root.append(label);
-    save = async () => { const data = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value])); data.version = c?.version ?? 0; data.createDomain = !c; await api(c ? `${app.dataset.classes}/${encodeURIComponent(c._id)}` : app.dataset.classes, data); $('sms-org-dialog').close(); await loadClasses(); };
+    save = async () => { const data = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value])); data.version = c?.version ?? 0; data.createDomain = !c; await api(c ? `${app.dataset.classes}/${encodeURIComponent(c._id)}` : app.dataset.classes, data); SmsUI.saved($('sms-org-dialog'));$('sms-org-dialog').close(); await loadClasses(); };
   }
   async function members(id) {
     const c = await api(`${app.dataset.classes}/${encodeURIComponent(id)}`);

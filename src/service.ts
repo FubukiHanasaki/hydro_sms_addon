@@ -14,7 +14,7 @@ export class StudentService {
   async requireAction(uid: number, code: string, classIds: string[] = []) { await this.authorization.require(uid, code, classIds); return this.policy(); }
   async studentPolicy(uid: number, exportOnly = false): Promise<Policy> {
     const p = await this.policy(); if (isAdmin(p, uid)) return p;
-    const grants = [...p.grants];
+    const grants = await this.authorization.departed(uid)?p.grants.filter(g=>g.uid!==uid):[...p.grants];
     for (const code of ['students.read', 'students.write', 'students.sensitive', 'students.bind'] as const) {
       const scope = await this.authorization.scope(uid, exportOnly && code==='students.read'?'students.export':code);
       if (scope === null) { grants.push({uid, permissions:[code], studentIds:'all', expiresAt:null}); continue; }
@@ -65,9 +65,10 @@ export class StudentService {
   }
   async me(uid: number) {
     const policy = await this.policy();
+    const teacher=await this.db.collection('sms_teachers').findOne({hydroUid:uid},{projection:{_id:1,'basic.status':1}});
     return {
-      uid, teacher:!!await this.db.collection('sms_teachers').findOne({hydroUid:uid},{projection:{_id:1}})||(await this.authorization.teaching(uid)).length>0, ...await this.authorization.snapshot(uid), admin: isAdmin(policy, uid), initialized: policy.admins.length > 0,
-      grants: activeGrant(policy, uid),
+      uid, teacherProfileId:teacher?._id??null, teacher:(!!teacher&&teacher.basic?.status!=='离职')||(await this.authorization.teaching(uid)).length>0, ...await this.authorization.snapshot(uid), admin: isAdmin(policy, uid), initialized: policy.admins.length > 0,
+      grants: await this.authorization.departed(uid)&&!isAdmin(policy,uid)?[]:activeGrant(policy, uid),
       boundStudentId: (await this.students.findOne({ hydroUid: uid }, { projection: { _id: 1 } }))?._id ?? null,
     };
   }

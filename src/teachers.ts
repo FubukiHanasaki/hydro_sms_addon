@@ -33,6 +33,7 @@ export class TeacherService {
    const key=id||`teacher:${actor}:${request}`,old=await this.teachers.findOne({_id:key});if(id&&!old)throw new SmsError(404,'教师档案不存在');
    if(!id&&old){if(old.requestHash!==fingerprint(b))throw new SmsError(409,'请求标识已用于其他档案');return this.detail(actor,key);}
    if(!Number.isSafeInteger(b.version)||(b.version as number)<0||(old?.version??0)!==b.version)throw new SmsError(409,'教师档案已更新，请刷新后重试');
+   if(old&&old.hydroUid!==uid)throw new SmsError(400,'教师档案的账号绑定不能更换，请保留历史档案并为新账号建档');
    const basic=object(b.basic);this.org.fields(basic,['name','teacherNo','gender','campus','status']);const data={name:text(basic.name,80,'姓名'),teacherNo:text(basic.teacherNo??'',80,'工号'),gender:text(basic.gender??'',10,'性别'),campus:text(basic.campus??'',100,'校区'),status:text(basic.status??'在职',10,'在职状态')};
    if(!data.name||!['男','女','未填写',''].includes(data.gender)||!['在职','离职'].includes(data.status))throw new SmsError(400,'请填写姓名并选择有效性别和在职状态');
    if(await this.teachers.findOne({_id:{$ne:key},hydroUid:uid}))throw new SmsError(409,'该 Hydro UID 已绑定教师档案');
@@ -40,8 +41,29 @@ export class TeacherService {
    const sensitive=object(b.sensitive??old?.sensitive??{});this.org.fields(sensitive,['phone','wechat']);const contacts={phone:text(sensitive.phone??'',160,'电话'),wechat:text(sensitive.wechat??'',160,'微信')};
    if('sensitive'in b||'internalNote'in b)await this.students.requireAction(actor,'teachers.sensitive');
    if('internalNote'in b&&uid===actor)throw new SmsError(403,'不能访问本人内部备注');const internalNote='internalNote'in b?text(b.internalNote,3000,'内部备注'):old?.internalNote||'';
+   const resetAccess=data.status==='离职'||old?.basic.status==='离职';
+   if(resetAccess)await this.students.authorization.requireAdmin(actor);
    const row:Teacher={_id:key,hydroUid:uid,basic:data,sensitive:contacts,internalNote,version:(old?.version??0)+1,createdAt:old?.createdAt??new Date(),updatedAt:new Date(),updatedBy:actor,requestHash:fingerprint(b)};
-   await verify();await this.students.mutation(actor,old?'teachers.update':'teachers.create',key,['basic','sensitive','hydroUid',...('internalNote'in b?['internalNote']:[])],async()=>{if(old){const r=await this.teachers.replaceOne({_id:key,version:old.version},row);if(!r.matchedCount)throw new SmsError(409,'教师档案已更新');}else await this.teachers.insertOne(row);});return this.detail(actor,key);
+   const revoke=async()=>{
+    await this.db.collection('sms_classes').updateMany({teacherUids:uid},{$pull:{teacherUids:uid} as any,$inc:{version:1},$set:{updatedAt:new Date(),updatedBy:actor,[`memberKinds.${uid}`]:'member'}});
+    // A single revision revokes bindings and grants together. Concurrent admin
+    // updates cannot restore a grant read before this lifecycle transition.
+    const auth=this.students.authorization;
+    for(let attempt=0;;attempt++){
+     const c=await auth.config();if(!await auth.collection.findOne({_id:'global'}))break;
+     const r=await auth.collection.updateOne({_id:'global',revision:c.revision},{$set:{bindings:c.bindings.filter(b=>b.uid!==uid||b.templateId==='none'),grants:c.grants.map(g=>g.uid===uid&&!g.revokedAt?{...g,revokedAt:new Date().toISOString()}:g)},$inc:{revision:1}});
+     if(r.matchedCount)break;if(attempt>=4)throw new SmsError(409,'权限配置正在更新，请重试教师状态变更');
+    }
+    await this.db.collection('sms_policy').updateOne({_id:'global' as any},{$pull:{grants:{uid}} as any,$inc:{revision:1}});
+    await this.students.audit(actor,data.status==='离职'?'teachers.departure':'teachers.rehire',key,['teachingAssignments','moduleGrants','studentGrants']);
+   };
+   await verify();await this.students.mutation(actor,old?'teachers.update':'teachers.create',key,['basic','sensitive','hydroUid',...('internalNote'in b?['internalNote']:[])],async()=>{
+    // Departure writes the denial gate first; rehire clears old authority while
+    // that gate is still closed. A failed cleanup can never reactivate access.
+    if(resetAccess&&data.status!=='离职')await revoke();
+    if(old){const r=await this.teachers.replaceOne({_id:key,version:old.version},row);if(!r.matchedCount)throw new SmsError(409,'教师档案已更新');}else await this.teachers.insertOne(row);
+    if(data.status==='离职')await revoke();
+   });return this.detail(actor,key);
   });
  }
 }

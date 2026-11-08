@@ -10,7 +10,7 @@
     let result; try { result = await response.json(); } catch { throw new Error('服务响应异常，请刷新后重试'); }
     if (!response.ok || !Object.hasOwn(result, 'data')) throw new Error(result.message || '账号操作未完成，请刷新后确认'); return result.data;
   }
-  async function load() {
+  async function load() {page=SmsUI.list('accounts',page,{q:$('sms-account-query'),status:$('sms-account-enabled')});
     const serial = ++request; const url = new URL(app.dataset.accounts, location.origin); url.search = new URLSearchParams({ q: $('sms-account-query').value, enabled: $('sms-account-enabled').value, page }); const data = await api(url); if (serial !== request) return;
     app.dataset.exportAccounts = JSON.stringify(Object.fromEntries(url.searchParams));
     currentRows = data.accounts; for (const a of data.accounts) if (selected.has(a.uid)) { if (a.protected) selected.delete(a.uid); else selected.set(a.uid, a); }
@@ -48,7 +48,7 @@
     save = async () => {
       if (password && password.value !== verify.value) throw new Error('两次密码输入不一致');
       const body = action === 'create' ? { username: username.value, password: password.value, requestId: key } : { action, version: account.version, ...(username ? { username: username.value } : {}), ...(password ? { password: password.value } : {}), ...(action === 'status' ? { enabled: !account.enabled } : {}) };
-      const result = await api(action === 'create' ? app.dataset.accounts : `${app.dataset.accounts}/${account.uid}`, body); $('sms-account-dialog').close(); $('sms-notice').hidden = false; $('sms-notice').textContent = action === 'create' ? `账号已创建：${result.username}（UID ${result.uid}）。` : '账号已更新。'; await load();
+      const result = await api(action === 'create' ? app.dataset.accounts : `${app.dataset.accounts}/${account.uid}`, body); SmsUI.saved($('sms-account-dialog'));$('sms-account-dialog').close(); $('sms-notice').hidden = false; $('sms-notice').textContent = action === 'create' ? `账号已创建：${result.username}（UID ${result.uid}）。` : '账号已更新。'; await load();
     };
     $('sms-account-dialog').showModal();
   }

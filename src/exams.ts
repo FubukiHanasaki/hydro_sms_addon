@@ -11,14 +11,18 @@ import { object, text } from './validation';
 export const EXAM_BRIDGE = Symbol.for('hydro.sms.exams');
 export const OFFLINE_BRIDGE = Symbol.for('hydro.offline-judge');
 export interface ExamDoc { _id: string; domainId: string; contestId: string; classIds: string[]; examType: string; scope: string; source: string; remark: string; archived: boolean; version: number; updatedBy: number; updatedAt: Date }
-export interface ExamHost { contest(actor: number, domain: string, id: string): Promise<any | null> }
+export interface ExamHost { contest(actor: number, domain: string, id: string, manager?: boolean): Promise<any | null> }
 const eligible = ['oi','ioi','strictioi','acm'];
 export class ExamService {
  constructor(private db: Db, private students: StudentService, private org: OrganizationService, private rating: RatingService, private host: ExamHost) {}
  get exams(){return this.db.collection<ExamDoc>('sms_exams');}
  get settings(){return this.db.collection('sms_exam_settings');}
- async init(){await this.exams.createIndex({classIds:1,archived:1});await this.db.collection('sms_exam_initializations').createIndex({expiresAt:1},{expireAfterSeconds:0});await restoreNative(this.db);}
+ async init(){await this.exams.createIndex({classIds:1,archived:1});await this.rating.sources.createIndex({key:1});await this.db.collection('sms_exam_initializations').createIndex({expiresAt:1},{expireAfterSeconds:0});await restoreNative(this.db);}
  key(domain: unknown,id: unknown){const d=text(domain,160,'子域 ID'),c=text(id,24,'比赛 ID');if(!d||! /^[a-f\d]{24}$/i.test(c))throw new SmsError(400,'比赛 ID 无效');return `${d}:${c.toLowerCase()}`;}
+ async deletionProtected(domainId:string,contestId:string){
+  const key=this.key(domainId,contestId);
+  return !!(await this.exams.findOne({_id:key},{projection:{_id:1}})||await this.db.collection('sms_rating_contests').findOne({_id:key as any},{projection:{_id:1}})||await this.rating.sources.findOne({key:`contest:${key}`},{projection:{_id:1}})||await this.db.collection('offline_judge_contests').findOne({_id:key as any},{projection:{_id:1}}));
+ }
  async ready(){return !!(await this.settings.findOne({_id:'global' as any}))?.initializedAt;}
  async requireReady(){if(!await this.ready())throw new SmsError(409,'请先由插件管理员完成过往比赛 Rated 初始化');}
  async allowed(actor:number,exam:ExamDoc,code:string){if(['exams.read','exams.export'].includes(code)){const scope=await this.students.authorization.scope(actor,code);return scope===null||exam.classIds.some(id=>scope.includes(id));}return this.students.authorization.can(actor,code,exam.classIds);}
@@ -31,7 +35,7 @@ export class ExamService {
   const e=contestId?await this.exams.findOne({_id:this.key(domainId,contestId)}):null;
   if(e)await this.require(actor,e,code);else await this.students.requireAction(actor,code,[domainId]);
  }
- async native(actor:number,exam:Pick<ExamDoc,'domainId'|'contestId'>){const c=await this.host.contest(actor,exam.domainId,exam.contestId);if(!c)throw new SmsError(404,'比赛不存在或无权访问');return c;}
+ async native(actor:number,exam:Pick<ExamDoc,'domainId'|'contestId'>){const c=await this.host.contest(actor,exam.domainId,exam.contestId,await this.nativeAllowed(actor,exam.domainId,exam.contestId,'exams.update'));if(!c)throw new SmsError(404,'比赛不存在或无权访问');return c;}
  async model(actor:number,domain:unknown,id:unknown,code='exams.read'){
   const row=await this.exams.findOne({_id:this.key(domain,id)});if(!row)throw new SmsError(404,'模拟赛不存在');await this.require(actor,row,code);await this.native(actor,row);return row;
  }
@@ -69,17 +73,17 @@ export class ExamService {
   return {...e,editUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}/edit`,title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt,durationMinutes:Math.round((+new Date(c.endAt)-+new Date(c.beginAt))/60000),fullScore:(c.pids??[]).reduce((sum:number,pid:number)=>sum+(c.score?.[pid]??100),0),problemCount:c.pids?.length??0,...this.ratingState(config,published),difficulty:config?.difficulty??'CSP-J',reviewedAt:published?.review?.at??null,canEdit:await this.allowed(actor,e,'exams.update'),canArchive:await this.allowed(actor,e,'exams.archive'),canReview:await this.students.authorization.admin(actor),canUpload:!!(globalThis as any)[OFFLINE_BRIDGE]&&+new Date(c.endAt)<=Date.now()&&await this.canUpload(actor,e.domainId,e.contestId),url:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}`,uploadUrl:`/d/${encodeURIComponent(e.domainId)}/contest/${e.contestId}#offline-code`};
  }
  async detail(actor:number,domain:unknown,id:unknown){const e=await this.model(actor,domain,id);return this.view(actor,e,await this.native(actor,e));}
- async editor(actor:number,domainId:string,contestId:string){
-  await this.requireReady();const e=await this.exams.findOne({_id:this.key(domainId,contestId)});
+ async editor(actor:number,domainId:string,contestId?:string){
+  await this.requireReady();const e=contestId?await this.exams.findOne({_id:this.key(domainId,contestId)}):null;
   if(e)await this.require(actor,e,'exams.update');else {await this.students.requireAction(actor,'exams.create',[domainId]);await this.students.requireAction(actor,'exams.update',[domainId]);}
-  const cfg=await this.db.collection('sms_rating_contests').findOne({_id:this.key(domainId,contestId) as any});
+  const cfg=contestId?await this.db.collection('sms_rating_contests').findOne({_id:this.key(domainId,contestId) as any}):null;
   const examTypes=[...new Set(['模拟赛','周测','月测','真题赛',...(e?.examType?[e.examType]:[])])];
-  return {exam:e??{domainId,contestId,classIds:[domainId],examType:'模拟赛',scope:'',source:'',remark:'',version:0},rated:cfg?.enabled??false,difficulty:cfg?.difficulty??'CSP-J',difficulties:DIFFICULTIES,examTypes};
+  return {canDelete:contestId?!await this.deletionProtected(domainId,contestId):false,exam:e??{domainId,contestId,classIds:[domainId],examType:'模拟赛',scope:'',source:'',remark:'',version:0},rated:cfg?.enabled??false,difficulty:cfg?.difficulty??'CSP-J',difficulties:DIFFICULTIES,examTypes};
  }
  async candidates(actor:number,domainValue:unknown){
   const domainId=text(domainValue,160,'比赛子域');await this.students.requireAction(actor,'exams.create',[domainId]);
   const docs=await this.db.collection('document').find({domainId,docType:30,rule:{$in:eligible}}).sort({beginAt:-1}).limit(200).toArray();const result=[];
-  for(const c of docs)if(await this.host.contest(actor,domainId,String(c.docId)))result.push({id:String(c.docId),title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt});return result;
+  for(const c of docs)if(await this.host.contest(actor,domainId,String(c.docId),await this.nativeAllowed(actor,domainId,String(c.docId),'exams.update')))result.push({id:String(c.docId),title:c.title,rule:c.rule,beginAt:c.beginAt,endAt:c.endAt});return result;
  }
  async save(actor:number,value:unknown,nativeWrite?:()=>Promise<void>){
   await this.requireReady();const b=object(value);this.org.fields(b,['domainId','contestId','classIds','examType','scope','source','remark','difficulty','rated','version','archived']);

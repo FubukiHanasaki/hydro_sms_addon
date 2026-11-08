@@ -199,7 +199,7 @@
     if (!app)
         return;
     let me, page = 1, request = 0, boardStats;
-    async function board() {
+    async function board() {page=SmsUI.list('rating',page,{q:$('sms-rating-query'),mode:$('sms-rating-mode'),classId:$('sms-rating-class'),grade:$('sms-rating-grade'),school:$('sms-rating-school')});
         const serial = ++request, url = new URL(app.dataset.rating, location.origin);
         url.search = new URLSearchParams({ q: $('sms-rating-query').value, mode: $('sms-rating-mode').value, page, grade: $('sms-rating-grade').value, school: $('sms-rating-school').value, classId: $('sms-rating-class').value });
         const data = await api(url);

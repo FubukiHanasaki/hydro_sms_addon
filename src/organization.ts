@@ -47,7 +47,7 @@ export class OrganizationService {
   async access(uid: number, domain: DomainDoc, metadata: ClassDoc | null) {
     const me = await this.students.me(uid);
     const joined = uid > 0 && await this.joined(domain._id, uid);
-    const teacher = joined && !!metadata?.teacherUids.includes(uid);
+    const teacher = joined && (await this.students.authorization.teaching(uid)).includes(domain._id);
     const readable = await this.students.authorization.can(uid,'classes.read',[domain._id]) || await this.students.authorization.can(uid,'courses.read',[domain._id]) || await this.students.authorization.can(uid,'schedules.read',[domain._id]) || await this.students.authorization.can(uid,'reports.read',[domain._id]);
     const delegated = (await Promise.all(['classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.can(uid,code,[domain._id])))).some(Boolean);
     if (!me.admin && !readable && !delegated) throw new SmsError(404,'班级与子域不存在或无权查看');
@@ -183,10 +183,11 @@ export class OrganizationService {
     ]).toArray();
     return { total: result?.count[0]?.total ?? 0, members: (result?.members ?? []).map((member: Document) => ({ ...member, kind: meta?.memberKinds?.[String(member.uid)] ?? member.kind,canEdit:canManage&&(!member.protectedMember||canTeachers),canRemove:member.canRemove&&(!member.protectedMember||canTeachers) })), page, pageSize: 20, version: meta?.version ?? 0, canManage, canTeachers };
   }
-  private async requireMemberMutation(uid:number,domain:DomainDoc,meta:ClassDoc|null,target:number,kind:unknown){
+  private async requireMemberMutation(uid:number,domain:DomainDoc,meta:ClassDoc|null,target:number,kind:unknown,joined:boolean){
     await this.students.requireAction(uid,'classes.members',[domain._id]);
     const native=await this.db.collection('domain.user').findOne({domainId:domain._id,uid:target});
     const protectedMember=target===domain.owner||meta?.teacherUids.includes(target)||meta?.memberKinds?.[String(target)]==='teacher'||await this.students.authorization.admin(target)||(native?.role&&native.role!=='default');
+    if(joined&&kind==='teacher'&&await this.students.authorization.departed(target))throw new SmsError(400,'请先办理教师复职，再分配任课关系');
     if(kind==='teacher'||protectedMember)await this.students.requireAction(uid,'classes.teachers',[domain._id]);
   }
   async domainMembership(uid: number, id: string, value: unknown) {
@@ -198,10 +199,10 @@ export class OrganizationService {
     if (input.roleOnly && input.kind === undefined) throw new SmsError(400, '请选择要修改的成员身份');
     const initial = await this.metadata(id); const domainId = initial?.domainId || id;
     await this.students.requireAction(uid,'classes.members',[domainId]);
-    await this.requireMemberMutation(uid,await this.domain(domainId),initial,target,kind);
+    await this.requireMemberMutation(uid,await this.domain(domainId),initial,target,kind,input.joined);
     if (domainId !== 'system' && kind === 'student' && !await this.students.students.findOne({ hydroUid: target })) throw new SmsError(400, '该账号尚未绑定学生档案，请先创建或绑定学生');
     return this.locked(domainId, async verify => {
-      const domain = await this.domain(domainId); const meta = await this.metadata(domainId);await this.requireMemberMutation(uid,domain,meta,target,kind);
+      const domain = await this.domain(domainId); const meta = await this.metadata(domainId);await this.requireMemberMutation(uid,domain,meta,target,kind,input.joined as boolean);
       if ((meta?.version ?? 0) !== input.version) throw new SmsError(409, '成员或资料已更新，请刷新名册后重试');
       if (domainId === 'system' && !input.joined) throw new SmsError(400, '主域所有账号默认加入，不能移除成员');
       if (input.roleOnly && (!input.joined || !await this.joined(domainId, target))) throw new SmsError(400, '只能修改已有成员的身份');

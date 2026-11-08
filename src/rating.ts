@@ -302,7 +302,7 @@ export class RatingService {
     async canIdentify(actor: number) {
         if (!Number.isSafeInteger(actor) || actor <= 0) return false;
         return !!(await this.students.students.findOne({ hydroUid: actor }, { projection: { _id: 1 } }) ||
-            await this.db.collection('sms_teachers').findOne({ hydroUid: actor }, { projection: { _id: 1 } }));
+            await this.db.collection('sms_teachers').findOne({ hydroUid: actor, 'basic.status':{$ne:'离职'} }, { projection: { _id: 1 } }));
     }
     async visibleHistory(actor: number, uidValue: unknown, pageValue: unknown = 1) {
         const uid = positiveInt(Number(uidValue), 'UID');

@@ -7,8 +7,9 @@ export interface AccountName { uid:number; username:string; profileName:string; 
 export class NameService {
  constructor(private db:Db){}
  async staffIds(){
-  const auth=new AuthorizationService(this.db),[policy,config,teachers]=await Promise.all([auth.policy(),auth.config(),this.db.collection('sms_teachers').distinct('hydroUid')]);
-  return new Set<number>([...policy.admins,...config.bindings.filter(b=>['office','readonly'].includes(b.templateId)).map(b=>b.uid),...teachers].filter((uid):uid is number=>Number.isSafeInteger(uid)&&uid>0));
+  const auth=new AuthorizationService(this.db),[policy,config,teachers]=await Promise.all([auth.policy(),auth.config(),this.db.collection('sms_teachers').distinct('hydroUid',{'basic.status':{$ne:'离职'}})]);
+  const departed=new Set(await this.db.collection('sms_teachers').distinct('hydroUid',{'basic.status':'离职'}));
+  return new Set<number>([...policy.admins,...config.bindings.filter(b=>!departed.has(b.uid)&&['office','readonly'].includes(b.templateId)).map(b=>b.uid),...teachers].filter((uid):uid is number=>Number.isSafeInteger(uid)&&uid>0));
  }
  async visibleIds(actor:number){
   const staff=await this.staffIds();if(actor>0&&staff.has(actor))return null;

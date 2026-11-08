@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { ObjectId, type Db } from 'mongodb';
+import { createHash } from 'node:crypto';
 // Only contest configuration belongs here. Identity, ownership, attendance and
 // submission/status data remain owned by Hydro and are never restored from a form.
 export const CONTEST_FIELDS = ['title','content','rule','beginAt','endAt','pids','rated','duration',
@@ -40,4 +41,11 @@ export async function restoreNative(db: Db) {
   await db.collection('document').updateOne(query,{$set:config,...saved&&Object.keys(unset).length?{$unset:unset}:{}});synchronized++;
  }
  return synchronized;
+}
+
+// Presentation, attachments and participation restrictions do not change scores.
+export function resultFingerprint(c:any) {
+ const fields=['rule','beginAt','endAt','pids','duration','score','lockAt','unlocked','allowTeam'];
+ const normalize=(v:any):any=>v instanceof Date?v.toISOString():Array.isArray(v)?v.map(normalize):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,normalize(v[k])])):v;
+ return createHash('sha256').update(JSON.stringify(fields.map(k=>[k,normalize(c[k]??null)]))).digest('hex');
 }

@@ -21,6 +21,7 @@
  const target=settings?.previousElementSibling;
  if(target)target.before(fields);else form.append(fields);
  fields.hidden=false;
+ {% if not smsEditor.canDelete %}form.querySelector('button[value="delete"]')?.remove();{% endif %}
  // One Rated control for both Hydro and SMS, including explicit false.
  const rated=form.querySelector('input[type="checkbox"][name="rated"]');
  if(rated)rated.checked={{ 'true' if smsEditor.rated else 'false' }};
