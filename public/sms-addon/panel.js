@@ -170,7 +170,7 @@
       state.current = student;
       state.createRequestId = student ? null : newRequestId();
       accountSearchRequest++;
-      const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
+      const caps = student?.capabilities || { edit: !!state.me.capabilities['students.create'], editSensitive: !!state.me.capabilities['students.sensitive'], sensitive: !!state.me.capabilities['students.sensitive'], internalNote: !!state.me.capabilities['students.sensitive'], bind: !!state.me.capabilities['students.bind'] };
       $('sms-dialog-title').textContent = student ? student.basic.name : '新建学生';
       const fields = $('sms-student-fields'); fields.replaceChildren();
       fields.append(fieldGroup('基本资料', basicFields, student?.basic || {}, caps.edit, 'basic'));
@@ -200,7 +200,7 @@
   }
   async function saveStudent(event) {
     event.preventDefault();
-    const student = state.current; const caps = student?.capabilities || { edit: true, editSensitive: true, sensitive: true, internalNote: true, bind: true };
+    const student = state.current; const caps = student?.capabilities || { edit: !!state.me.capabilities['students.create'], editSensitive: !!state.me.capabilities['students.sensitive'], sensitive: !!state.me.capabilities['students.sensitive'], internalNote: !!state.me.capabilities['students.sensitive'], bind: !!state.me.capabilities['students.bind'] };
     const values = new FormData(event.target); const body = {};
     if (student) body.version = student.version;
     else body.requestId = state.createRequestId;

@@ -54,7 +54,8 @@ export class OrganizationService {
     return {me,staff:await this.students.authorization.fullRead(uid,domain._id),teacher};
   }
   async allowedDomains(uid: number) {
-    const scopes=await Promise.all(['classes.read','courses.read','schedules.read','reports.read','classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.scope(uid,code)));
+    const codes=['classes.read','courses.read','schedules.read','reports.read','classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'];
+    const effective=await this.students.authorization.dependencyScopes(uid,undefined,Date.now(),codes),scopes=codes.map(code=>effective.scopes[code]);
     return scopes.includes(null)?null:[...new Set(scopes.flatMap(v=>v??[]))];
   }
   async domainList(uid: number) {
@@ -136,7 +137,7 @@ export class OrganizationService {
     const routeDomain = id ? await this.storedDomain(routeMetadata?.domainId || id) : null;
     return this.locked(domainId, async verify => {
       const previous = await this.metadata(routeMetadata?._id || domainId);
-      await this.students.requireAction(uid, input.createDomain ? 'classes.create' : 'classes.update', input.createDomain ? [] : [domainId]);if(input.createDomain)await this.students.requireAction(uid,'classes.read');
+      await this.students.requireAction(uid, input.createDomain ? 'classes.create' : 'classes.update', input.createDomain ? [] : [domainId]);
       if(previous && previous.status!==data.status) await this.students.requireAction(uid,'classes.archive',[domainId]);
       if (previous && previous.domainId !== domainId) throw new SmsError(400, '不能修改已关联的子域 ID');
       if (id && (routeMetadata ? routeMetadata.domainId !== domainId : routeDomain?._id !== domainId)) throw new SmsError(404, '班级与子域不存在');

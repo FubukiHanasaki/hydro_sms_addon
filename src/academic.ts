@@ -21,12 +21,12 @@ export class AcademicService {
  constructor(private db:Db,private students:StudentService,private org:OrganizationService,private teaching:TeachingService){}
  async candidates(actor:number,domainId:string,value:unknown){await this.students.requireAction(actor,'courses.roster',[domainId]);const policy=await this.students.studentPolicy(actor),q=text(value??'',80,'学生搜索');if(!q)return [];const filter=readFilter(policy,actor),pattern=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return this.students.students.find({$and:[filter,{hydroUid:{$type:'number'}},{$or:[{'basic.name':{$regex:pattern,$options:'i'}},.../^[1-9]\d*$/.test(q)?[{hydroUid:Number(q)}]:[]]}]},{projection:{hydroUid:1,'basic.name':1}}).limit(20).toArray();}
  async board(actor:number,q:Record<string,unknown>={}){
-  const scope=await this.students.authorization.scope(actor,'reports.read'),courseScope=await this.students.authorization.scope(actor,'courses.read'),scheduleScope=await this.students.authorization.scope(actor,'schedules.read');
+  const scope=await this.students.authorization.scope(actor,'reports.read');
   if(scope!==null&&!scope.length)throw new SmsError(403,'没有教务报表权限');
   const day=new Date(Date.now()+8*3600000).toISOString().slice(0,10),dates=period(q.from||`${day.slice(0,7)}-01`,q.to||new Date(Date.UTC(+day.slice(0,4),+day.slice(5,7),0)).toISOString().slice(0,10));
-  const visible=await this.org.domainList(actor),classes=visible.filter(c=>(scope===null||scope.includes(c._id))&&(courseScope===null||courseScope.includes(c._id))),classId=text(q.classId??'',64,'班级'),teacher=text(q.teacherUid??'',20,'教师');
+  const visible=await this.org.domainList(actor),classes=visible.filter(c=>scope===null||scope.includes(c._id)),classId=text(q.classId??'',64,'班级'),teacher=text(q.teacherUid??'',20,'教师');
   if(classId&&!classes.some(c=>c._id===classId))throw new SmsError(403,'无权查看该班教务数据');if(teacher&&!/^[1-9]\d*$/.test(teacher))throw new SmsError(400,'教师 UID 无效');
-  const ids=classes.filter(c=>!classId||c._id===classId).map(c=>c._id),planIds=ids.filter(id=>scheduleScope===null||scheduleScope.includes(id)),allLessons=(await Promise.all(planIds.map(id=>this.teaching.instances(id,dates.from,dates.to)))).flat();
+  const ids=classes.filter(c=>!classId||c._id===classId).map(c=>c._id),allLessons=(await Promise.all(ids.map(id=>this.teaching.instances(id,dates.from,dates.to)))).flat();
   const actual=await this.teaching.records.find({domainId:{$in:ids},date:{$gte:dates.from,$lte:dates.to}}).sort({date:1,start:1,_id:1}).limit(5001).toArray();if(actual.length>5000||allLessons.length>10000)throw new SmsError(400,'教务数据过多，请缩小日期范围');
   const linked=await this.teaching.records.find({_id:{$in:allLessons.flatMap(l=>l.courseId?[l.courseId]:[])},domainId:{$in:ids}}).toArray();
   const metadata=await this.org.classes.find({domainId:{$in:ids}}).toArray(),members=await this.db.collection('domain.user').find({domainId:{$in:ids},join:true}).toArray();

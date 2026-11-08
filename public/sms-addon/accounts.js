@@ -58,5 +58,5 @@
   $('sms-account-create').addEventListener('click', () => open('create')); $('sms-account-search-form').addEventListener('submit', e => { e.preventDefault(); page = 1; load().catch(error); });
   $('sms-account-enabled').addEventListener('change', () => { page = 1; load().catch(error); }); $('sms-account-prev').addEventListener('click', () => { page--; load().catch(error); }); $('sms-account-next').addEventListener('click', () => { page++; load().catch(error); });
   app.addEventListener('sms:ready', e => { me = e.detail;$('sms-account-create').hidden=!me.capabilities['accounts.create'];$('sms-account-bulk-password').hidden=!me.capabilities['accounts.password']; });
-  app.addEventListener('sms:tab', e => { me = e.detail.me; if (e.detail.tab === 'accounts') { if (!me?.admin) { error(new Error('需要插件管理员授权')); return; } load().catch(error); } });
+  app.addEventListener('sms:tab', e => { me = e.detail.me; if (e.detail.tab === 'accounts') { if (!me?.capabilities['accounts.read']) { error(new Error('没有账户查看权限')); return; } load().catch(error); } });
 })();

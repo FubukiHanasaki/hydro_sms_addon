@@ -23,10 +23,42 @@ interface Binding { uid:number;templateId:string }
 interface Grant { id:string;uid:number;permissions:string[];classIds:'all'|string[];startsAt:string;expiresAt:string|null;reason:string;createdBy:number;createdAt:string;revokedAt?:string }
 interface Config { _id:string;revision:number;templates:Template[];bindings:Binding[];grants:Grant[] }
 const rules=(codes:string[],scope:Scope='all')=>Object.fromEntries(codes.map(c=>[c,scope]));
+// Dependencies describe existing workflow requirements, never implied grants.
+export const DEPENDENCIES:Record<string,string[]> = {
+ 'students.create':['students.read','students.bind'],
+ 'students.import':['students.create','students.write','students.bind','students.read'],
+ 'students.promote':['students.write','students.read'],
+ 'classes.archive':['classes.update'],
+ 'teachers.create':['teachers.read'],'teachers.update':['teachers.read'],
+ 'schedules.create':['schedules.read'],'schedules.update':['schedules.read'],'schedules.adjust':['schedules.read'],
+ 'courses.create':['courses.read'],'courses.update':['courses.read'],
+ 'courses.link':['courses.update','courses.read','schedules.read'],
+ 'courses.roster':['students.read'],
+ 'accounts.create':['accounts.read'],'accounts.rename':['accounts.read'],'accounts.password':['accounts.read'],'accounts.status':['accounts.read'],
+ 'accounts.provision':['students.bind','students.read'],'accounts.export':['accounts.read'],'audit.export':['audit.read'],
+};
+export function permissionLabel(code:string){const [module,action]=code.split('.');const entry=MODULES[module as keyof typeof MODULES];return entry?`${entry[0]} · ${(entry[1] as Record<string,string>)[action]??action}`:code;}
+function dependenciesFor(codes:string[]){const needed=new Set<string>();const include=(code:string)=>{if(needed.has(code))return;needed.add(code);for(const required of DEPENDENCIES[code]??[])include(required);};codes.forEach(include);return [...needed];}
+function dependencyState(raw:Record<string,string[]|null>,legacyRead:boolean,admin=false){
+ const scopes:Record<string,string[]|null>={},dependencyIssues:{code:string;requires:string;classIds:string[]|null}[]=[];
+ const resolve=(code:string):string[]|null=>{
+  if(Object.hasOwn(scopes,code))return scopes[code];let ids=raw[code];
+  if(!admin)for(const required of DEPENDENCIES[code]??[]){
+   const dependency=resolve(required);
+   if(code==='courses.roster'&&(dependency===null||dependency.length||legacyRead))continue;
+   if(dependency===null)continue;
+   const missing=ids===null?null:ids.filter(id=>!dependency.includes(id));
+   if(ids===null||missing?.length)dependencyIssues.push({code,requires:required,classIds:missing});
+   ids=ids===null?dependency:ids.filter(id=>dependency.includes(id));
+  }
+  return scopes[code]=GLOBAL_ONLY.has(code)&&ids!==null?[]:ids;
+ };
+ for(const code of Object.keys(raw))resolve(code);return {raw,scopes,dependencyIssues};
+}
 export const BUILTINS:Template[] = [
  {id:'legacy',name:'现有身份权限',builtin:true,rules:{}},
  {id:'office',name:'教务',builtin:true,rules:rules(CODES.filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')&&!c.startsWith('rating.')&&c!=='students.promote'&&c!=='exams.review'))},
- {id:'teaching',name:'任课教师',builtin:true,rules:rules(['students.read','students.export','classes.read','classes.members','classes.export','schedules.read','schedules.export','courses.read','courses.create','courses.update','courses.link','reports.read','exams.read','exams.create','exams.update','exams.archive','exams.submit','exams.export'],'teaching')},
+ {id:'teaching',name:'任课教师',builtin:true,rules:{...rules(['students.read','students.export','classes.members','classes.export','schedules.export','courses.create','courses.update','courses.link','courses.export','reports.read','reports.export','exams.create','exams.update','exams.archive','exams.submit','exams.export'],'teaching'),...rules(['classes.read','schedules.read','courses.read','exams.read'],'member')}},
  {id:'readonly',name:'只读教务',builtin:true,rules:rules(CODES.filter(c=>c.endsWith('.read')||c.endsWith('.export')).filter(c=>!c.startsWith('accounts.')&&!c.startsWith('audit.')))},
  {id:'self',name:'学生本人',builtin:true,rules:rules(['classes.read','schedules.read','courses.read','exams.read'],'member')},
  {id:'none',name:'无业务默认权限',builtin:true,rules:{}},
@@ -38,7 +70,7 @@ export class AuthorizationService {
  async policy():Promise<Policy>{return await this.db.collection<Policy>('sms_policy').findOne({_id:'global'})??{_id:'global',admins:[],grants:[],revision:0};}
  async admin(uid:number){return uid>0&&(await this.policy()).admins.includes(uid);}
  async requireAdmin(uid:number){if(!await this.admin(uid))throw new SmsError(403,'需要插件管理员授权');}
- catalog(){return Object.entries(MODULES).map(([id,[label,actions]])=>({id,label,actions:Object.entries(actions).map(([a,label])=>({code:`${id}.${a}`,label,globalOnly:GLOBAL_ONLY.has(`${id}.${a}`)}))}));}
+ catalog(){return Object.entries(MODULES).map(([id,[label,actions]])=>({id,label,actions:Object.entries(actions).map(([a,label])=>({code:`${id}.${a}`,label,globalOnly:GLOBAL_ONLY.has(`${id}.${a}`),requires:DEPENDENCIES[`${id}.${a}`]??[]}))}));}
  async departed(uid:number){return !!await this.db.collection('sms_teachers').findOne({hydroUid:uid,'basic.status':'离职'},{projection:{_id:1}});}
  async teaching(uid:number){if(await this.departed(uid))return [];const taught=await this.db.collection('sms_classes').distinct('domainId',{teacherUids:uid});return this.db.collection('domain.user').distinct('domainId',{domainId:{$in:taught},uid,join:true});}
  // A Hydro membership is independent of student/teacher profile binding.
@@ -48,7 +80,7 @@ export class AuthorizationService {
   if(!Number.isSafeInteger(uid)||uid<=0)return [];
   return this.db.collection('domain.user').distinct('domainId',{uid,join:true});
  }
- async scope(uid:number,code:string,config?:Config,knownAdmin?:boolean,knownDeparted?:boolean):Promise<string[]|null>{
+ async scope(uid:number,code:string,config?:Config,knownAdmin?:boolean,knownDeparted?:boolean,at=Date.now()):Promise<string[]|null>{
   if(uid<=0||!CODES.includes(code))return [];
   if(knownAdmin??await this.admin(uid))return null;
   const c=config??await this.config(),binding=c.bindings.find(b=>b.uid===uid),template=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
@@ -59,23 +91,57 @@ export class AuthorizationService {
    if(['students.read','classes.members','exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
   }
   if(base==='all')return null;
-  const ids=new Set<string>(base==='teaching'?await this.teaching(uid):base==='member'?await this.members(uid):[]),now=Date.now();
+  const ids=new Set<string>(base==='teaching'?await this.teaching(uid):base==='member'?await this.members(uid):[]),now=at;
   for(const g of c.grants.filter(g=>g.uid===uid&&!g.revokedAt&&Date.parse(g.startsAt)<=now&&(!g.expiresAt||Date.parse(g.expiresAt)>now)&&g.permissions.includes(code))){
    if(g.classIds==='all')return null;for(const id of g.classIds)ids.add(id);
   }
+  // Creating a domain includes reading its basic class information, not every
+  // class or its roster. Revoking creation authority removes this fallback.
+  if(code==='classes.read'&&await this.scope(uid,'classes.create',c,false,false,at)===null){
+   for(const domain of await this.db.collection('domain').find({owner:uid},{projection:{_id:1}}).toArray())ids.add(String(domain._id));
+  }
   return [...ids];
+ }
+ async dependencyScopes(uid:number,config?:Config,at=Date.now(),codes=CODES){
+  const c=config??await this.config(),admin=await this.admin(uid),departed=await this.departed(uid);
+  const raw:Record<string,string[]|null>=Object.fromEntries(await Promise.all(dependenciesFor(codes).map(async code=>[code,await this.scope(uid,code,c,admin,departed,at)])));
+  const legacy=await this.policy(),legacyRead=!departed&&legacy.grants.some(g=>g.uid===uid&&g.permissions.includes('students.read')&&(!g.expiresAt||Date.parse(g.expiresAt)>at));
+  // Roster lookup still applies studentPolicy, including legacy student grants.
+  return dependencyState(raw,legacyRead,admin);
+ }
+ private async validateGrant(uid:number,c:Config,grant:Grant){
+  const codes=grant.permissions.filter(code=>DEPENDENCIES[code]);if(!codes.length)return;
+  const needed=dependenciesFor(codes),base=(await this.dependencyScopes(uid,{...c,grants:[]},Date.now(),codes)).raw,policy=await this.policy();
+  const start=Math.max(Date.now(),Date.parse(grant.startsAt)),end=grant.expiresAt?Date.parse(grant.expiresAt):Infinity,points=new Set([start]);
+  // Evaluate every authority boundary so a longer grant cannot outlive its
+  // prerequisite. Base membership scopes are resolved once, not per boundary.
+  const relevant=c.grants.filter(g=>g.uid===uid&&!g.revokedAt&&g.permissions.some(code=>needed.includes(code)));
+  for(const g of relevant)for(const date of [g.startsAt,g.expiresAt]){const at=date?Date.parse(date):NaN;if(at>start&&at<end)points.add(at);}
+  for(const g of policy.grants)if(g.uid===uid&&g.permissions.includes('students.read')&&g.expiresAt){const at=Date.parse(g.expiresAt);if(at>start&&at<end)points.add(at);}
+  for(const at of [...points].sort((a,b)=>a-b)){
+   const raw=Object.fromEntries(needed.map(code=>{let ids=base[code];for(const g of relevant)if(g.permissions.includes(code)&&Date.parse(g.startsAt)<=at&&(!g.expiresAt||Date.parse(g.expiresAt)>at)){if(g.classIds==='all'){ids=null;break;}if(ids!==null)ids=[...new Set([...ids,...g.classIds])];}return [code,ids];}));
+   const state=dependencyState(raw,policy.grants.some(g=>g.uid===uid&&g.permissions.includes('students.read')&&(!g.expiresAt||Date.parse(g.expiresAt)>at)));
+   for(const code of codes){const ids=state.scopes[code];if(ids!==null&&(grant.classIds==='all'||!grant.classIds.every(id=>ids.includes(id)))){
+    const missing=[...new Set(state.dependencyIssues.filter(i=>dependenciesFor([code]).includes(i.code)).map(i=>permissionLabel(i.requires)))];
+    throw new SmsError(400,`${permissionLabel(code)} 缺少前置权限或其范围、有效期不足：${missing.join('、')}。请明确补齐后再授权`);
+   }}
+  }
  }
  async fullRead(uid:number,id:string){
   if(await this.admin(uid))return true;if(await this.departed(uid))return false;const c=await this.config(),binding=c.bindings.find(b=>b.uid===uid),t=[...BUILTINS,...c.templates].find(t=>t.id===(binding?.templateId??'legacy'));
   if(t?.id==='legacy'&&(await this.teaching(uid)).includes(id))return true;
   for(const code of ['classes.read','courses.read','reports.read','courses.create','courses.update','classes.members']){
    if(t?.rules[code]&&t.rules[code]!=='member'&&await this.can(uid,code,[id]))return true;
-   if(c.grants.some(g=>g.uid===uid&&!g.revokedAt&&Date.parse(g.startsAt)<=Date.now()&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())&&g.permissions.includes(code)&&(g.classIds==='all'||g.classIds.includes(id))))return true;
+   if(c.grants.some(g=>g.uid===uid&&!g.revokedAt&&Date.parse(g.startsAt)<=Date.now()&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())&&g.permissions.includes(code)&&(g.classIds==='all'||g.classIds.includes(id)))&&await this.can(uid,code,[id]))return true;
   }return false;
  }
- async can(uid:number,code:string,classIds?:string[]){const ids=await this.scope(uid,code);return ids===null||!!(classIds?.length?classIds.every(id=>ids.includes(id)):classIds?false:ids.length);}
- async require(uid:number,code:string,classIds:string[]=[]){if(!await this.can(uid,code,classIds)){await this.db.collection('sms_audit').insertOne({uid,action:'authorization.denied',target:code,fields:classIds,at:new Date(),outcome:'denied'});throw new SmsError(403,`没有对应操作权限或超出班级范围：${code}`);}}
- async snapshot(uid:number){const c=await this.config(),admin=await this.admin(uid),departed=await this.departed(uid),scopes:Record<string,string[]|null>=Object.fromEntries(await Promise.all(CODES.map(async code=>[code,await this.scope(uid,code,c,admin,departed)])));return {catalog:this.catalog(),classes:(await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).toArray()).filter(d=>admin||Object.entries(scopes).some(([code,ids])=>!GLOBAL_ONLY.has(code)&&(ids===null||ids.includes(String(d._id))))).map(d=>({id:String(d._id),name:d.name||String(d._id)})),legacyGrants:(await this.policy()).grants.filter(g=>(admin||!departed)&&g.uid===uid&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())),templateName:[...BUILTINS,...c.templates].find(t=>t.id===(c.bindings.find(b=>b.uid===uid)?.templateId??'legacy'))?.name,admin,revision:c.revision,templateId:c.bindings.find(b=>b.uid===uid)?.templateId??'legacy',scopes,capabilities:Object.fromEntries(Object.entries(scopes).map(([code,ids])=>[code,ids===null||!!ids.length]))};}
+ async can(uid:number,code:string,classIds?:string[]){
+  // Most read checks need no dependency expansion or additional database reads.
+  let ids=await this.scope(uid,code);if(DEPENDENCIES[code]&&(ids===null||ids.length))ids=(await this.dependencyScopes(uid,undefined,Date.now(),[code])).scopes[code];
+  return ids===null||!!(classIds?.length?classIds.every(id=>ids.includes(id)):classIds?false:ids.length);
+ }
+ async require(uid:number,code:string,classIds:string[]=[]){if(!await this.can(uid,code,classIds)){await this.db.collection('sms_audit').insertOne({uid,action:'authorization.denied',target:code,fields:classIds,at:new Date(),outcome:'denied'});const issues=DEPENDENCIES[code]?(await this.dependencyScopes(uid,undefined,Date.now(),[code])).dependencyIssues:[],missing=[...new Set(issues.map(i=>permissionLabel(i.requires)))];throw new SmsError(403,missing.length?`${permissionLabel(code)} 缺少前置权限或范围不足：${missing.join('、')}`:`没有对应操作权限或超出班级范围：${code}`);}}
+ async snapshot(uid:number){const c=await this.config(),admin=await this.admin(uid),departed=await this.departed(uid),{scopes,dependencyIssues}=await this.dependencyScopes(uid,c);return {catalog:this.catalog(),classes:(await this.db.collection('domain').find({},{projection:{_id:1,name:1}}).toArray()).filter(d=>admin||Object.entries(scopes).some(([code,ids])=>!GLOBAL_ONLY.has(code)&&(ids===null||ids.includes(String(d._id))))).map(d=>({id:String(d._id),name:d.name||String(d._id)})),legacyGrants:(await this.policy()).grants.filter(g=>(admin||!departed)&&g.uid===uid&&(!g.expiresAt||Date.parse(g.expiresAt)>Date.now())),templateName:[...BUILTINS,...c.templates].find(t=>t.id===(c.bindings.find(b=>b.uid===uid)?.templateId??'legacy'))?.name,admin,revision:c.revision,templateId:c.bindings.find(b=>b.uid===uid)?.templateId??'legacy',scopes,dependencyIssues,capabilities:Object.fromEntries(Object.entries(scopes).map(([code,ids])=>[code,ids===null||!!ids.length]))};}
  async searchAccounts(actor:number,query:unknown){
   await this.requireAdmin(actor);
   const q=text(query??'',80,'账号搜索词');if(!q)return [];
@@ -103,6 +169,7 @@ export class AuthorizationService {
    const id=b.id?text(b.id,80,'模板 ID'):`custom:${randomUUID()}`;if(BUILTINS.some(t=>t.id===id))throw new SmsError(400,'内置模板不能修改');
    const name=text(b.name,60,'模板名称'),r=object(b.rules);if(!name)throw new SmsError(400,'请填写模板名称');if([...BUILTINS,...c.templates].some(t=>t.id!==id&&t.name===name))throw new SmsError(409,'模板名称已存在');
    if(Object.entries(r).some(([code,scope])=>!CODES.includes(code)||!['all','teaching'].includes(String(scope))||GLOBAL_ONLY.has(code)&&scope!=='all'))throw new SmsError(400,'模板权限或范围无效');
+   for(const [code,scope]of Object.entries(r))for(const required of DEPENDENCIES[code]??[])if(!r[required]||code!=='courses.roster'&&scope==='all'&&r[required]!=='all')throw new SmsError(400,`${permissionLabel(code)} 需要 ${permissionLabel(required)}，请在模板中明确设置足够的范围`);
    c.templates=c.templates.filter(t=>t.id!==id);c.templates.push({id,name,rules:r as Template['rules']});
   }else if(action==='grant'){
    const permissions=b.permissions;if(!Array.isArray(permissions)||!permissions.length||permissions.length>CODES.length||new Set(permissions).size!==permissions.length||permissions.some(p=>!CODES.includes(p)))throw new SmsError(400,'请选择有效操作');
@@ -110,7 +177,8 @@ export class AuthorizationService {
    if(ids!=='all'){if(permissions.some(p=>GLOBAL_ONLY.has(p)))throw new SmsError(400,'所选操作只支持全局授权');if(await this.db.collection('domain').countDocuments({_id:{$in:ids}as never})!==ids.length)throw new SmsError(400,'班级不存在');}
    const at=(v:unknown,required:boolean)=>!v&&!required?null:zonedInstant(v);
    const startsAt=b.startsAt?at(b.startsAt,true)!:new Date().toISOString(),expiresAt=at(b.expiresAt,false);if(expiresAt&&(Date.parse(expiresAt)<=Date.now()||expiresAt<=startsAt))throw new SmsError(400,'失效时间须晚于开始时间和当前时间');
-   c.grants.push({id:randomUUID(),uid:target,permissions,classIds:ids as Grant['classIds'],startsAt,expiresAt,reason:text(b.reason??'',500,'授权备注'),createdBy:uid,createdAt:new Date().toISOString()});
+   const grant={id:randomUUID(),uid:target,permissions,classIds:ids as Grant['classIds'],startsAt,expiresAt,reason:text(b.reason??'',500,'授权备注'),createdBy:uid,createdAt:new Date().toISOString()};
+   c.grants.push(grant);await this.validateGrant(target,c,grant);
   }else if(action==='revoke'){
    const g=c.grants.find(g=>g.id===b.id&&g.uid===target);if(!g)throw new SmsError(404,'授权不存在');g.revokedAt=new Date().toISOString();
   }else throw new SmsError(400,'授权操作无效');
