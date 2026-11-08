@@ -54,7 +54,7 @@ export class AuthorizationService {
   let base=template?.rules[code];
   if(template?.id==='legacy'){
    if(['exams.read','classes.read','schedules.read','courses.read','classes.export','schedules.export','courses.export','reports.export'].includes(code))base='member';
-   if(['classes.members','exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
+   if(['students.read','classes.members','exams.create','exams.update','exams.archive','exams.submit','exams.export','courses.create','courses.update','courses.link','reports.read'].includes(code))base='teaching';
   }
   if(base==='all')return null;
   const ids=new Set<string>(base==='teaching'?await this.teaching(uid):base==='member'?await this.members(uid):[]),now=Date.now();

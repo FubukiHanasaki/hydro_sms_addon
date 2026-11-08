@@ -10,16 +10,26 @@ export class NameService {
   const auth=new AuthorizationService(this.db),[policy,config,teachers]=await Promise.all([auth.policy(),auth.config(),this.db.collection('sms_teachers').distinct('hydroUid')]);
   return new Set<number>([...policy.admins,...config.bindings.filter(b=>['office','readonly'].includes(b.templateId)).map(b=>b.uid),...teachers].filter((uid):uid is number=>Number.isSafeInteger(uid)&&uid>0));
  }
- async visibleIds(actor:number){const staff=await this.staffIds();return actor>0&&staff.has(actor)?null:new Set([...staff,...actor>0?[actor]:[]]);}
+ async visibleIds(actor:number){
+  const staff=await this.staffIds();if(actor>0&&staff.has(actor))return null;
+  const visible=new Set([...staff,...actor>0?[actor]:[]]);if(actor<=0)return visible;
+  // Class teachers without a teacher profile may identify students they can
+  // actually read, but gain no global name or contact visibility.
+  const auth=new AuthorizationService(this.db),scope=await auth.scope(actor,'students.read');
+  const taught=(await auth.teaching(actor)).filter(id=>scope===null||scope.includes(id));
+  if(taught.length){const uids=await this.db.collection('domain.user').distinct('uid',{domainId:{$in:taught},join:true});
+   for(const uid of await this.db.collection('sms_students').distinct('hydroUid',{hydroUid:{$in:uids}}))if(Number.isSafeInteger(uid)&&uid>0)visible.add(uid);}
+  return visible;
+ }
  async resolve(actor:number,values:Iterable<number>):Promise<Map<number,AccountName>>{
-  const uids=[...new Set(values)].filter(uid=>Number.isSafeInteger(uid)&&uid>0),staff=await this.staffIds(),all=actor>0&&staff.has(actor),visible=uids.filter(uid=>all||uid===actor||staff.has(uid));
+  const uids=[...new Set(values)].filter(uid=>Number.isSafeInteger(uid)&&uid>0),staff=await this.staffIds(),visibleIds=await this.visibleIds(actor),visible=uids.filter(uid=>visibleIds===null||visibleIds.has(uid));
   const [users,teachers,students]=await Promise.all([
    this.db.collection<{_id:number;uname:string}>('user').find({_id:{$in:uids}},{projection:{uname:1}}).toArray(),
    this.db.collection('sms_teachers').find({hydroUid:{$in:visible}},{projection:{hydroUid:1,'basic.name':1}}).toArray(),
    this.db.collection('sms_students').find({hydroUid:{$in:visible}},{projection:{hydroUid:1,'basic.name':1}}).toArray(),
   ]);
   const teacherMap=new Map(teachers.map(p=>[p.hydroUid,p.basic?.name])),studentMap=new Map(students.map(p=>[p.hydroUid,p.basic?.name]));
-  return new Map(users.map(u=>{const profileName=String(teacherMap.get(u._id)||studentMap.get(u._id)||'');return [u._id,{uid:u._id,username:u.uname,profileName,displayName:profileName&&profileName!==u.uname?`${profileName} (${u.uname})`:u.uname,staff:staff.has(u._id),canViewProfileName:all||u._id===actor||staff.has(u._id)}];}));
+  return new Map(users.map(u=>{const profileName=String(teacherMap.get(u._id)||studentMap.get(u._id)||'');return [u._id,{uid:u._id,username:u.uname,profileName,displayName:profileName&&profileName!==u.uname?`${profileName} (${u.uname})`:u.uname,staff:staff.has(u._id),canViewProfileName:visibleIds===null||visibleIds.has(u._id)}];}));
  }
  async project<T>(actor:number,value:T):Promise<T>{
   const ids=new Set<number>(),seen=new WeakSet<object>();

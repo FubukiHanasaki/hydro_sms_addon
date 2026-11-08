@@ -12,6 +12,38 @@ export function examHost(){return {async contest(actor:number,domain:string,id:s
  return c;
 }};}
 export function installExams(ctx:Context,exams:ExamService){
+ // Guard native routes before their own prepare methods, including contests
+ // not linked to SMS yet. Native ownership or broad domain roles never bypass
+ // independent module scopes. Permission adaptation is request-local only.
+ const scopeNative=async(h:any,action?:'create'|'update')=>{
+  const actor=h.user?._id??0,domain=h.domain._id,raw=String(h.args?.tid??''),id=/^[a-f\d]{24}$/i.test(raw)?raw:undefined;
+  if(id){const c=await ContestModel.get(domain,new ObjectId(id));if(c&&ContestModel.RULES[c.rule]?.hidden)return;}
+  try{if(action)await exams.requireNative(actor,domain,id,`exams.${action}`);}catch(err){if(err instanceof SmsError)throw new ForbiddenError();throw err;}
+  const canCreate=await exams.nativeAllowed(actor,domain,undefined,'exams.create');
+  const canEdit=id?await exams.nativeAllowed(actor,domain,id,'exams.update'):false;
+  // Use the current session ceiling, not a scope retained in Hydro's user cache.
+  const base=h.user;let sessionScope:bigint;
+  try{sessionScope=BigInt(h.session?.scope??base.scope);}catch{throw new ForbiddenError();}
+  const inScope=(p:bigint)=>(sessionScope&p)===p;
+  if(action&&!(action==='create'?inScope(PERM.PERM_CREATE_CONTEST):inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF)))throw new ForbiddenError();
+  const user=Object.create(base),mapped=new Map([[PERM.PERM_CREATE_CONTEST,canCreate],[PERM.PERM_EDIT_CONTEST,canEdit],[PERM.PERM_EDIT_CONTEST_SELF,canEdit]]);
+  user.hasPerm=(...perms:bigint[])=>perms.some(p=>inScope(p)&&(mapped.has(p)?mapped.get(p):base.hasPerm(p)));
+  user.own=(doc:any,arg:any=false)=>doc?.docType===30&&doc.domainId===domain?canEdit&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF))&&base.own(doc,arg):base.own(doc,arg);
+  h.user=user;
+ };
+ ctx.on('handler/before-prepare/ContestEdit',async(h:any)=>{await scopeNative(h,h.args?.tid?'update':'create');});
+ for(const name of ['ContestManagement','ContestUser','ContestClarification','ContestBalloon','ContestCode'])ctx.on(`handler/before-prepare/${name}`,async(h:any)=>{await scopeNative(h,'update');});
+ for(const name of ['ContestList','ContestDetail','ContestProblemList','ContestScoreboard','ContestFileDownload'])ctx.on(`handler/before-prepare/${name}`,async(h:any)=>{
+  await scopeNative(h); // File downloads retain Hydro's participant/time checks.
+ });
+ // Homework handlers share the contest collection and do not themselves
+ // verify the document rule. Never let an OI contest be mutated through those
+ // alternate forms; genuine homework retains its original authorization.
+ for(const name of ['HomeworkEdit','HomeworkFiles'])ctx.on(`handler/before-prepare/${name}`,async(h:any)=>{
+  const id=String(h.args?.tid??'');if(!/^[a-f\d]{24}$/i.test(id))return;
+  const c=await ContestModel.get(h.domain._id,new ObjectId(id));
+  if(c&&!ContestModel.RULES[c.rule]?.hidden)throw new ForbiddenError();
+ });
  const correctionRecord=async(actor:number,domain:string,id:string,owner:number)=>{
   try {
   await exams.requireReady();

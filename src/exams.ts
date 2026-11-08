@@ -23,6 +23,14 @@ export class ExamService {
  async requireReady(){if(!await this.ready())throw new SmsError(409,'请先由插件管理员完成过往比赛 Rated 初始化');}
  async allowed(actor:number,exam:ExamDoc,code:string){if(['exams.read','exams.export'].includes(code)){const scope=await this.students.authorization.scope(actor,code);return scope===null||exam.classIds.some(id=>scope.includes(id));}return this.students.authorization.can(actor,code,exam.classIds);}
  async require(actor:number,exam:ExamDoc,code:string){if(['exams.read','exams.export'].includes(code)){if(!await this.allowed(actor,exam,code)){await this.students.audit(actor,'authorization.denied',code,exam.classIds);throw new SmsError(403,'没有对应模拟赛的班级访问权限');}return;}await this.students.requireAction(actor,code,exam.classIds);}
+ async nativeAllowed(actor:number,domainId:string,contestId:string|undefined,code:string){
+  const e=contestId?await this.exams.findOne({_id:this.key(domainId,contestId)}):null;
+  return e?await this.allowed(actor,e,code):await this.students.authorization.can(actor,code,[domainId]);
+ }
+ async requireNative(actor:number,domainId:string,contestId:string|undefined,code:string){
+  const e=contestId?await this.exams.findOne({_id:this.key(domainId,contestId)}):null;
+  if(e)await this.require(actor,e,code);else await this.students.requireAction(actor,code,[domainId]);
+ }
  async native(actor:number,exam:Pick<ExamDoc,'domainId'|'contestId'>){const c=await this.host.contest(actor,exam.domainId,exam.contestId);if(!c)throw new SmsError(404,'比赛不存在或无权访问');return c;}
  async model(actor:number,domain:unknown,id:unknown,code='exams.read'){
   const row=await this.exams.findOne({_id:this.key(domain,id)});if(!row)throw new SmsError(404,'模拟赛不存在');await this.require(actor,row,code);await this.native(actor,row);return row;
