@@ -2,6 +2,7 @@ import { NameService, installNames } from './src/names';
 import { ExamService } from './src/exams';
 import { examHost, installExams } from './src/exam-hydro';
 import { installProblemPermissions } from './src/problem-hydro';
+import { installNativeBoundary } from './src/native-boundary';
 import { MemberImportService } from './src/member-import';
 import { AcademicService } from './src/academic';
 import { ScheduleBatchService } from './src/schedule-batch';
@@ -25,6 +26,7 @@ export const name = 'hydro-sms-addon';
 export async function apply(ctx: Context) {
   const service = new StudentService(ctx.db.db, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
   await service.init();
+  installNativeBoundary(ctx, service);
   const organization = new OrganizationService(ctx.db.db, service, {
     create: (id, owner, name, bulletin) => DomainModel.add(id, owner, name, bulletin),
     edit: (id, data) => DomainModel.edit(id, data),

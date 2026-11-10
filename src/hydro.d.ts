@@ -5,6 +5,7 @@
 import type { Db } from 'mongodb';
 export interface Context {
   db: { db: Db };
+  server: { addLayer(name: string, layer: (context: any, next: () => Promise<void>) => Promise<void>): void };
   Route(name: string, path: string, handler: typeof Handler): void;
   injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number): void;
   i18n: { load(language: string, entries: Record<string, string>): void };
@@ -35,7 +36,8 @@ export class Handler {
   checkPriv(privilege: number): void;
   url(name: string, args?: Record<string, unknown>): string;
 }
-export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number };
+export const PRIV: { PRIV_USER_PROFILE: number; PRIV_DEFAULT: number; PRIV_VIEW_ALL_DOMAIN: number; PRIV_READ_RECORD_CODE: number; PRIV_MANAGE_ALL_DOMAIN: number };
+export const APIS: Record<string, any>;
 export const UserModel: {
   getById(domain: string, uid: number): Promise<any>;
   listGroup(domain: string, uid: number): Promise<any[]>;
@@ -45,18 +47,19 @@ export const UserModel: {
   _deleteUserCache(value: true, receiver?: boolean): void;
   setPriv(uid: number, priv: number): Promise<unknown>;
 };
-export const TokenModel: { delByUid(uid: number): Promise<unknown> };
+export const TokenModel: { TYPE_SESSION: number; get(id: string, type: number): Promise<any>; delByUid(uid: number): Promise<unknown> };
 export const Types: { Username: [(value: string) => string, (value: string) => boolean] };
 export class ForbiddenError extends Error {}
 export class ValidationError extends Error {}
 
 export const DomainModel: {
+  get(id: string): Promise<any>;
   add(id: string, owner: number, name: string, bulletin: string): Promise<unknown>;
   edit(id: string, data: { name: string; bulletin: string }): Promise<unknown>;
   setJoin(id: string, uid: number, join: boolean): Promise<unknown>;
 };
 
-export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getStatus(domainId: string, id: import('mongodb').ObjectId, uid: number): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; };
+export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getStatus(domainId: string, id: import('mongodb').ObjectId, uid: number): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; canShowRecord: any; canShowSelfRecord: any; };
 export const ProblemModel: { get(domainId: string, pid: number): Promise<any> };
-export const PERM: { PERM_VIEW_RANKING: bigint; PERM_VIEW_CONTEST: bigint; PERM_VIEW_HIDDEN_CONTEST: bigint; PERM_CREATE_CONTEST: bigint; PERM_EDIT_CONTEST: bigint; PERM_EDIT_CONTEST_SELF: bigint; PERM_CREATE_PROBLEM: bigint; PERM_EDIT_PROBLEM: bigint; PERM_EDIT_PROBLEM_SELF: bigint; PERM_REJUDGE_PROBLEM: bigint; PERM_REJUDGE: bigint; PERM_VIEW_PROBLEM: bigint; PERM_VIEW_PROBLEM_HIDDEN: bigint };
+export const PERM: { PERM_READ_RECORD_CODE: bigint; PERM_READ_RECORD_CODE_ACCEPT: bigint; PERM_VIEW: bigint; PERM_VIEW_RANKING: bigint; PERM_VIEW_CONTEST: bigint; PERM_VIEW_HIDDEN_CONTEST: bigint; PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD: bigint; PERM_CREATE_CONTEST: bigint; PERM_EDIT_CONTEST: bigint; PERM_EDIT_CONTEST_SELF: bigint; PERM_CREATE_PROBLEM: bigint; PERM_EDIT_PROBLEM: bigint; PERM_EDIT_PROBLEM_SELF: bigint; PERM_REJUDGE_PROBLEM: bigint; PERM_REJUDGE: bigint; PERM_VIEW_PROBLEM: bigint; PERM_VIEW_PROBLEM_HIDDEN: bigint };
 export const RecordModel: any;

@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
 import { captureNative, resultFingerprint } from './exam-native';
 import { ObjectId } from 'mongodb';
-import { Context, ContestModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError, ValidationError } from 'hydrooj';
+import { Context, ContestModel, DomainModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError, ValidationError } from 'hydrooj';
 import { ExamService, EXAM_BRIDGE } from './exams';
 import { SmsError } from './types';
 import { text } from './validation';
@@ -9,7 +9,7 @@ import { installCorrectionRecords } from './correction-records';
 export function examHost(){return {async contest(actor:number,domain:string,id:string,manager=false){
  if(!actor||!/^[a-f\d]{24}$/i.test(id))return null;const u=await UserModel.getById(domain,actor);if(!u?.hasPriv(PRIV.PRIV_USER_PROFILE)||!u.hasPerm(PERM.PERM_VIEW_CONTEST))return null;
  let c;try{c=await ContestModel.get(domain,new ObjectId(id));}catch(err){if((err as Error).name==='ContestNotFoundError')return null;throw err;}if(!c||c.domainId!==domain||ContestModel.RULES[c.rule]?.hidden)return null;
- if(!manager&&c.assign?.length&&c.owner!==actor&&!u.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST)){const groups=await UserModel.listGroup(domain,actor);if(!groups.some((g:any)=>c.assign.includes(g.name)))return null;}
+ if(!manager&&c.assign?.length){const groups=await UserModel.listGroup(domain,actor);if(!groups.some((g:any)=>c.assign.includes(g.name)))return null;}
  return c;
 }};}
 export function installExams(ctx:Context,exams:ExamService){
@@ -31,8 +31,10 @@ export function installExams(ctx:Context,exams:ExamService){
   try{sessionScope=BigInt(h.session?.scope??base.scope);}catch{throw new ForbiddenError();}
   const inScope=(p:bigint)=>(sessionScope&p)===p;
   if(action&&!(action==='create'?inScope(PERM.PERM_CREATE_CONTEST):inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF)))throw new ForbiddenError();
-  const user=Object.create(base),mapped=new Map([[PERM.PERM_CREATE_CONTEST,canCreate],[PERM.PERM_EDIT_CONTEST,canEdit],[PERM.PERM_EDIT_CONTEST_SELF,canEdit],[PERM.PERM_VIEW_HIDDEN_CONTEST,base.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST)||canEdit&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF))]]);
-  user.hasPerm=(...perms:bigint[])=>perms.some(p=>inScope(p)&&(mapped.has(p)?mapped.get(p):base.hasPerm(p)));
+  const inspect=(id?canEdit:await exams.nativeAllowed(actor,domain,undefined,'exams.update'))&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF));
+  const user=Object.create(base),mapped=new Map([[PERM.PERM_CREATE_CONTEST,canCreate],[PERM.PERM_EDIT_CONTEST,canEdit],[PERM.PERM_EDIT_CONTEST_SELF,canEdit],[PERM.PERM_VIEW_HIDDEN_CONTEST,inspect],[PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD,inspect]]);
+  const mappedMask=[...mapped.keys()].reduce((mask,p)=>mask|p,0n),nativePerm=BigInt(base.perm);
+  user.hasPerm=(...perms:bigint[])=>perms.some(p=>inScope(p)&&[...mapped].every(([bit,allowed])=>!(p&bit)||allowed)&&(nativePerm&(p&~mappedMask))===(p&~mappedMask));
   user.own=(doc:any,arg:any=false)=>doc?.docType===30&&doc.domainId===domain?canEdit&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF))&&base.own(doc,arg):base.own(doc,arg);
   h.user=user;
  };
@@ -60,6 +62,44 @@ export function installExams(ctx:Context,exams:ExamService){
   } catch(error) { if(error instanceof SmsError)throw new ForbiddenError();throw error; }
  };
  installCorrectionRecords(ctx,'smsCorrection',(h,record,id)=>correctionRecord(h.user._id,h.domain._id,id,record.uid));
+ // Record pages and live feeds are independent routes. Resolve their formal
+ // contest before native owner/maintainer shortcuts or hidden-score checks.
+ const scopeRecords=async(h:any)=>{
+  const rid=String(h.context.params?.rid??h.args?.rid??'');
+  if(h.context.params?.rid)h.args.rid=h.context.params.rid;
+  let id=String(h.args?.tid??'');
+  if(/^[a-f\d]{24}$/i.test(rid)){
+   const record=await RecordModel.get(h.domain._id,new ObjectId(rid));
+   if(record?.contest)id=String(record.contest);else return;
+  }
+  if(h.args.allDomain&&!['false','off','no','0'].includes(h.args.allDomain)&&!await exams.globalRecordAccess(h.user._id))throw new ForbiddenError();
+  if(!/^[a-f\d]{24}$/i.test(id)){await scopeNative(h);return;}
+  if(id.startsWith('0'.repeat(23)))return;
+  h.args.tid=id;await scopeNative(h);
+  const e=await exams.exams.findOne({_id:exams.key(h.domain._id,id)});
+  if(e)try{await exams.requireReady();await exams.require(h.user._id,e,'exams.read');await exams.native(h.user._id,e);}catch(err){if(err instanceof SmsError)throw new ForbiddenError();throw err;}
+ };
+ for(const name of ['RecordDetail','RecordList'])ctx.on(`handler/before-prepare/${name}`,scopeRecords);
+ ctx.on('handler/create/ws',async(h:any)=>{
+  if(!['RecordDetailConnectionHandler','RecordMainConnectionHandler'].includes(h.constructor.name))return;
+  h.smsAuthorizeRecord=async(record:any,current:any)=>{
+   if(h.allDomain&&(!current.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN)||!await exams.globalRecordAccess(h.user._id)))throw new ForbiddenError();
+   const id=String(record?.contest??'');if(!/^[a-f\d]{24}$/i.test(id)||id.startsWith('0'.repeat(23)))return null;
+   let local=h;
+   if(record.domainId!==h.domain._id){
+    if(!h.allDomain)throw new ForbiddenError();
+    const domain=await DomainModel.get(record.domainId);if(!domain)throw new ForbiddenError();
+    local=Object.assign(Object.create(h),{domain,args:{...h.args,domainId:domain._id}});
+   }
+   local.args.tid=id;await scopeRecords(local);
+   const c=await ContestModel.get(local.domain._id,new ObjectId(id));if(!c)throw new ForbiddenError();
+   if(c.assign?.length&&!local.user.own(c)&&!local.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST)&&!c.assign.some((g:string)=>local.user.group?.includes(g)))throw new ForbiddenError();
+   if(!local.user.own(c)&&!(record.uid===local.user._id?ContestModel.canShowSelfRecord.call(local,c,true):ContestModel.canShowRecord.call(local,c,true)))throw new ForbiddenError();
+   return c;
+  };
+  const prepare=h.prepare.bind(h);
+  h.prepare=async(args:any)=>{await scopeRecords(h);return prepare(args);};
+ });
  ctx.effect(()=>{const bridge={reviewRequired:true,correctionRecord,authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
  // Apply the independent module scope to every native contest subpage/API,
  // while retaining all original Hydro checkers and hidden/assign restrictions.

@@ -24,6 +24,7 @@ export class ExamService {
   return !!(await this.exams.findOne({_id:key},{projection:{_id:1}})||await this.db.collection('sms_rating_contests').findOne({_id:key as any},{projection:{_id:1}})||await this.rating.sources.findOne({key:`contest:${key}`},{projection:{_id:1}})||await this.db.collection('offline_judge_contests').findOne({_id:key as any},{projection:{_id:1}}));
  }
  async ready(){return !!(await this.settings.findOne({_id:'global' as any}))?.initializedAt;}
+ async globalRecordAccess(actor:number){return await this.students.authorization.scope(actor,'exams.read')===null&&await this.students.authorization.scope(actor,'exams.update')===null;}
  async requireReady(){if(!await this.ready())throw new SmsError(409,'请先由插件管理员完成过往比赛 Rated 初始化');}
  async allowed(actor:number,exam:ExamDoc,code:string){if(['exams.read','exams.export'].includes(code)){const scope=await this.students.authorization.scope(actor,code);return scope===null||exam.classIds.some(id=>scope.includes(id));}return this.students.authorization.can(actor,code,exam.classIds);}
  async require(actor:number,exam:ExamDoc,code:string){if(['exams.read','exams.export'].includes(code)){if(!await this.allowed(actor,exam,code)){await this.students.audit(actor,'authorization.denied',code,exam.classIds);throw new SmsError(403,'没有对应模拟赛的班级访问权限');}return;}await this.students.requireAction(actor,code,exam.classIds);}
