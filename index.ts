@@ -1,6 +1,7 @@
 import { NameService, installNames } from './src/names';
 import { ExamService } from './src/exams';
 import { examHost, installExams } from './src/exam-hydro';
+import { installProblemPermissions } from './src/problem-hydro';
 import { MemberImportService } from './src/member-import';
 import { AcademicService } from './src/academic';
 import { ScheduleBatchService } from './src/schedule-batch';
@@ -51,6 +52,7 @@ export async function apply(ctx: Context) {
   const exams = new ExamService(ctx.db.db, service, organization, rating, examHost());
   await exams.init();
   installExams(ctx, exams);
+  installProblemPermissions(ctx, service);
   const studentImport = new StudentImportService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)), rating);
   await studentImport.init();
   installRating(ctx, rating, organization);

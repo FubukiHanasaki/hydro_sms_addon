@@ -1,0 +1,7 @@
+{% extends "problem_detail.html" %}
+{% block content %}
+{{ super() }}
+{% if not smsProblemCanCopy %}
+<script>document.querySelector('[name="problem-sidebar__copy"]')?.closest('li')?.remove();</script>
+{% endif %}
+{% endblock %}
