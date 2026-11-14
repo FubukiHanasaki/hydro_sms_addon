@@ -25,8 +25,10 @@ export function installProblemPermissions(ctx:Context,students:StudentService){
   const base=beforeChecker?await fresh.private():h.user,nativePerm=BigInt(fresh.perm);
   const [canCreate,canEdit]=await Promise.all([students.authorization.can(actor,'problems.create',[domain]),students.authorization.can(actor,'problems.update',[domain])]);
   let sessionScope:bigint;try{sessionScope=BigInt(h.session?.scope??base.scope);}catch{sessionScope=0n;}
-  const denied=(canCreate?0n:create)|(canEdit?0n:edit),user=Object.create(base);
-  user.perm=nativePerm;user.scope=sessionScope;
+  // Native private-user serialization enumerates own fields. A prototype-only
+  // wrapper loses the UID/preferences used by the UI and per-account drafts.
+  const denied=(canCreate?0n:create)|(canEdit?0n:edit),user=Object.assign(Object.create(Object.getPrototypeOf(base)),base);
+  user.perm=BigInt(base.perm)&~denied;user.scope=sessionScope;
   user.hasPerm=(...perms:bigint[])=>perms.some(p=>!(p&denied)&&(sessionScope&p)===p&&(beforeChecker||(p&(create|edit))!==0n?(nativePerm&p)===p:base.hasPerm(p)));
   user.own=(doc:any,arg:any=false)=>typeof arg==='bigint'&&(arg&(create|edit))?user.hasPerm(arg)&&(doc?.owner===actor||doc?.maintainer?.includes(actor)):base.own(doc,arg);
   h.user=user;

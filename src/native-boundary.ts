@@ -32,10 +32,22 @@ export function installNativeBoundary(ctx: Context, students: StudentService) {
     await next();
   });
   ctx.on('handler/create/ws', async (h: any) => {
-    if (!h.noCheckPermView && !h.user.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) h.checkPerm(PERM.PERM_VIEW);
+    // A dedicated judge is authenticated by the native PRIV_JUDGE checker,
+    // independent of whether its account may browse a private domain.
+    const judge = h.constructor.name === 'JudgeConnectionHandler' && h.user.hasPriv(PRIV.PRIV_JUDGE);
+    if (!judge && !h.noCheckPermView && !h.user.hasPriv(PRIV.PRIV_VIEW_ALL_DOMAIN)) h.checkPerm(PERM.PERM_VIEW);
     if (!['RecordMainConnectionHandler', 'RecordDetailConnectionHandler'].includes(h.constructor.name)) return;
     const list = h.constructor.name === 'RecordMainConnectionHandler';
     const send = h.send.bind(h);
+    const queuedRecords = new WeakMap<object, string>();
+    if (list) {
+      const queueSend = h.queueSend.bind(h);
+      h.queueSend = (rid: string, render: () => Promise<any>) => queueSend(rid, async () => {
+        const payload = await render();
+        if (payload && typeof payload === 'object') queuedRecords.set(payload, rid);
+        return payload;
+      });
+    }
     let pending = Promise.resolve(), closed = false;
     // Queries use a list projection, but bus updates contain complete records.
     h.send = (payload: any) => {
@@ -47,8 +59,20 @@ export function installNativeBoundary(ctx: Context, students: StudentService) {
         const current = await UserModel.getById(h.domain._id, actor), scope = BigInt(token?.scope ?? h.session.scope ?? h.user.scope);
         if ((BigInt(current.perm) & scope & PERM.PERM_VIEW) !== PERM.PERM_VIEW) throw new ForbiddenError();
         h.session.scope = scope.toString();
-        const rdoc = payload?.rdoc ?? (h.rid ? await RecordModel.get(h.domain._id, new ObjectId(h.rid)) : null);
-        const contest = rdoc ? await h.smsAuthorizeRecord?.(rdoc, current) : null;
+        const queuedRid = queuedRecords.get(payload);
+        const rdoc = payload?.rdoc ?? (h.rid ? await RecordModel.get(h.domain._id, new ObjectId(h.rid))
+          : queuedRid ? await RecordModel.get(new ObjectId(queuedRid)) : null);
+        if (queuedRid && !rdoc) return;
+        let access: any;
+        try { access = rdoc ? await h.smsAuthorizeRecord?.(rdoc, current) : null; }
+        catch (error) {
+          // A mixed feed should skip an unrelated forbidden contest, not
+          // terminate the viewer's valid subscription. Revocation of a selected
+          // contest, session or domain still closes the connection.
+          if (list && !h.tid && (error as any).smsRecordFiltered) return;
+          throw error;
+        }
+        const contest = access?.contest;
         if (rdoc?.contest) {
           const exam = await ctx.db.db.collection('sms_exams').findOne({ _id: `${rdoc.domainId}:${rdoc.contest}` as any }, { projection: { classIds: 1 } });
           if (exam) {
@@ -56,15 +80,25 @@ export function installNativeBoundary(ctx: Context, students: StudentService) {
             if (scope !== null && !exam.classIds.some((id: string) => scope.includes(id))) throw new ForbiddenError();
           }
         }
-        if (!list && payload?.rdoc && rdoc.uid !== actor) {
+        if (!list && rdoc && rdoc.uid !== actor) {
           const perm = BigInt(current.perm) & scope;
           let code = current.hasPriv(PRIV.PRIV_READ_RECORD_CODE) || (perm & PERM.PERM_READ_RECORD_CODE) === PERM.PERM_READ_RECORD_CODE;
           if (!code && (perm & PERM.PERM_READ_RECORD_CODE_ACCEPT) === PERM.PERM_READ_RECORD_CODE_ACCEPT) code = (await ctx.db.db.collection('document.status').findOne({ domainId: h.domain._id, docType: 10, docId: rdoc.pid, uid: actor }, { projection: { status: 1 } }))?.status === 1;
           if (contest) {
-            code ||= h.user.own(contest);
+            code ||= access.own;
             if (!code && contest.allowViewCode && +new Date(contest.endAt) <= Date.now()) code = !!(await ContestModel.getStatus(h.domain._id, contest.docId, actor))?.attend;
           }
-          if (!code) payload = { ...payload, rdoc: { ...payload.rdoc, code: '', files: {}, compilerTexts: [] } };
+          if (!code) {
+            if (payload?.rdoc) payload = { ...payload, rdoc: { ...payload.rdoc, code: '', files: {}, compilerTexts: [] } };
+            else if (payload?.status_html || payload?.summary_html) {
+              const projected = h.applyProjection && contest ? ContestModel.applyProjection(contest, rdoc, access.user) : rdoc;
+              const safe = { ...projected, code: '', files: {}, compilerTexts: [] };
+              payload = { ...payload,
+                status_html: await h.renderHTML('record_detail_status.html', { rdoc: safe, pdoc: h.pdoc }),
+                summary_html: await h.renderHTML('record_detail_summary.html', { rdoc: safe, pdoc: h.pdoc }),
+              };
+            }
+          }
         }
         if (list && payload?.rdoc) {
           const fields: string[] = h.pretest && rdoc.uid === actor
