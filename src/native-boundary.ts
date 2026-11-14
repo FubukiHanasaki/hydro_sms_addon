@@ -3,11 +3,27 @@ import { APIS, Context, ContestModel, DomainModel, ForbiddenError, PERM, PRIV, R
 import { StudentService } from './service';
 import { ObjectId } from 'mongodb';
 
-// A business target in a payload must never select the permissions used to
-// authorize the URL's native handler. This layer also runs on connections.
+// Business payloads cannot select a native HTTP handler's permissions. The
+// native UI's shared record connections explicitly select their target in the
+// query instead; bind both the domain and user to that verified target.
 export function installNativeBoundary(ctx: Context, students: StudentService) {
   ctx.server.addLayer('sms-native-domain', async (context: any, next: () => Promise<void>) => {
-    const hc = context.HydroContext, id = hc?.domain?._id;
+    const hc = context.HydroContext;
+    let id = hc?.domain?._id;
+    const sharedRecord = /^\/record-(?:detail-)?conn\/?$/.test(context.path)
+      && !/^\/d\//.test(context.originalPath ?? context.path);
+    if (sharedRecord && context.query.domainId !== undefined) {
+      const target = context.query.domainId;
+      const domain = typeof target === 'string' && target ? await DomainModel.get(target) : null;
+      // Let Hydro's connection error handler send a denial and close the
+      // socket; throwing before it exists leaves an upgrade without a reply.
+      if (!domain) context.pendingError ??= new ForbiddenError();
+      else {
+        id = domain._id;
+        hc.domain = domain;
+        hc.user = await (await UserModel.getById(id, hc.user._id)).private();
+      }
+    }
     if (id && hc.user) {
       if (hc.args.domainId !== id) hc.user = await (await UserModel.getById(id, hc.user._id)).private();
       hc.args.domainId = id;
