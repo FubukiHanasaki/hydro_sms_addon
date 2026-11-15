@@ -283,7 +283,7 @@ export class RatingService {
             if (config.enabled) rest.push({ ...fresh, review: { id: reviewId, by: actor, at: new Date().toISOString(), hash, configVersion: preview.version, resultVersion: preview.resultVersion ?? 0 } });
             return rest.sort((a, b) => a.key.localeCompare(b.key));
         }, preview.revision);
-        await reviews.updateOne({ _id: reviewId as any }, { $set: { state: 'complete', completedAt: new Date() } });
+        await reviews.updateOne({ _id: reviewId as any }, { $set: { state: 'complete', completedAt: new Date() }, $unset: { expiresAt: '' } });
         await this.db.collection('sms_rating_contests').updateOne({ _id: `${preview.domainId}:${preview.contestId}` as any }, { $unset: { error: '' } });
         await this.students.audit(actor, 'rating.review', `${preview.domainId}:${preview.contestId}`, ['review:'+reviewId, 'enabled:'+preview.enabled]);
         return { ...result, approved: true };

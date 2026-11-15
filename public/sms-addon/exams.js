@@ -51,5 +51,10 @@
   if(!data.exams.length){const tr=el('tr'),td=el('td',ready?'暂无符合条件的模拟赛':'完成初始化后显示比赛列表','sms-empty');td.colSpan=5;tr.append(td);rows.append(tr);}
  }
  if(app){$('sms-exam-reset').addEventListener('click',()=>{$('sms-exam-search').reset();page=1;load().catch(error);});$('sms-exam-search').addEventListener('submit',e=>{e.preventDefault();page=1;load().catch(error);});$('sms-exam-prev').addEventListener('click',()=>{page--;load().catch(error);});$('sms-exam-next').addEventListener('click',()=>{page++;load().catch(error);});app.addEventListener('sms:ready',e=>{me=e.detail;const classes=$('sms-exam-class');for(const c of me.classes||[]){const o=el('option',c.name);o.value=c.id;classes.append(o);}const tools=$('sms-exam-tools');if(me.capabilities['exams.export'])tools.append(globalThis.SmsExport.control('导出列表','exams',()=>filters()));if(me.capabilities['exams.create']){const create=button('＋ 关联比赛',()=>edit(null),'primary rounded button');create.id='sms-exam-create';tools.append(create);}});app.addEventListener('sms:tab',e=>{if(e.detail.tab==='exams'){me=e.detail.me;load().catch(error);}});}
- if(native){native.querySelector('[data-exam-review]')?.addEventListener('click',()=>review(native.dataset.domain,native.dataset.contest).catch(error));}
+ if(native){
+  native.querySelector('[data-exam-review]')?.addEventListener('click',()=>review(native.dataset.domain,native.dataset.contest).catch(error));
+  native.querySelector('[data-offline-open]')?.addEventListener('click',()=>{
+   if(document.getElementById('offline-app')?.dataset.ready!=='1'||!document.getElementById('offline-import-dialog'))error(new Error('离线代码包组件未加载，请刷新页面后重试'));
+  });
+ }
 })();
