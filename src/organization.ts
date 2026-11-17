@@ -18,7 +18,8 @@ interface ClassDoc {
 interface DomainDoc { _id: string; name?: string; bulletin?: string; avatar?: string; langs?: string; share?: string; owner: number }
 // Teacher assignment is an extra check on member management, not a standalone
 // operation. Do not offer a management page when neither workflow is allowed.
-export const DOMAIN_MANAGEMENT_ACTIONS = ['classes.update', 'classes.members'] as const;
+export const MAX_BULLETIN_LENGTH = 100000;
+export const DOMAIN_MANAGEMENT_ACTIONS = ['classes.update', 'classes.bulletin', 'classes.members'] as const;
 export class OrganizationService {
   constructor(private db: Db, private students: StudentService, private host: DomainGateway) {}
   get classes() { return this.db.collection<ClassDoc>('sms_classes'); }
@@ -45,6 +46,9 @@ export class OrganizationService {
   // Hydro preserves the original _id and uses its unique lower index for aliases.
   // Return that stored identity; never use an alias as a foreign key or scope.
   private async storedDomain(id: string) { return await this.domains.findOne({ _id: id }) ?? this.domains.findOne({ lower: id.toLowerCase() }); }
+  async canonicalDomain(id: string) { const domain = await this.storedDomain(id); if (!domain) throw new SmsError(404, '子域不存在'); return domain; }
+  async canEditBulletin(uid: number, id: string) { return await this.students.authorization.can(uid, 'classes.update', [id]) || await this.students.authorization.can(uid, 'classes.bulletin', [id]); }
+  async requireBulletin(uid: number, id: string) { if (!await this.canEditBulletin(uid, id)) throw new SmsError(403, '没有该班级的公告与学习资料管理权限'); }
   async domain(id: string) { const row = await this.domains.findOne({ _id: id }); if (!row) throw new SmsError(404, '班级与子域不存在'); return row; }
   async joined(id: string, uid: number) { return !!await this.db.collection('domain.user').findOne({ domainId: id, uid, join: true }); }
   async access(uid: number, domain: DomainDoc, metadata: ClassDoc | null) {
@@ -52,12 +56,12 @@ export class OrganizationService {
     const joined = uid > 0 && await this.joined(domain._id, uid);
     const teacher = joined && (await this.students.authorization.teaching(uid)).includes(domain._id);
     const readable = await this.students.authorization.can(uid,'classes.read',[domain._id]) || await this.students.authorization.can(uid,'courses.read',[domain._id]) || await this.students.authorization.can(uid,'schedules.read',[domain._id]) || await this.students.authorization.can(uid,'reports.read',[domain._id]);
-    const delegated = (await Promise.all(['classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.can(uid,code,[domain._id])))).some(Boolean);
+    const delegated = (await Promise.all(['classes.update','classes.bulletin','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'].map(code=>this.students.authorization.can(uid,code,[domain._id])))).some(Boolean);
     if (!me.admin && !readable && !delegated) throw new SmsError(404,'班级与子域不存在或无权查看');
     return {me,staff:await this.students.authorization.fullRead(uid,domain._id),teacher};
   }
   async allowedDomains(uid: number) {
-    const codes=['classes.read','courses.read','schedules.read','reports.read','classes.update','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'];
+    const codes=['classes.read','courses.read','schedules.read','reports.read','classes.update','classes.bulletin','classes.members','classes.teachers','courses.create','courses.update','courses.link','schedules.create','schedules.update','schedules.adjust'];
     const effective=await this.students.authorization.dependencyScopes(uid,undefined,Date.now(),codes),scopes=codes.map(code=>effective.scopes[code]);
     return scopes.includes(null)?null:[...new Set(scopes.flatMap(v=>v??[]))];
   }
@@ -116,7 +120,7 @@ export class OrganizationService {
       _id: domain._id, domainId: domain._id, name: domain.name || domain._id, description: domain.bulletin || '',
       avatar: domain.avatar || '', langs: domain.langs || '', ...(me.admin ? { share: domain.share || '' } : {}),
       type: metadata?.type || '', academicYear: metadata?.academicYear || '', schedule: metadata?.schedule || '', location: metadata?.location || '', status: metadata?.status || 'active',
-      version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: await this.students.authorization.can(uid,'classes.update',[domain._id]),
+      version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: await this.students.authorization.can(uid,'classes.update',[domain._id]), canEditBulletin: await this.canEditBulletin(uid,domain._id),
       ...(me.admin ? { owner: domain.owner } : {}), ...(staff ? { memberCount: uids.length } : {}),
       students: students.map(s => ({ id: s._id, name: s.basic.name, grade: s.basic.grade, school: s.basic.school, hydroUid: s.hydroUid })),
       teachers: teachers.map(t => ({ uid: t._id, username: t.uname, name: teacherProfiles.find(p => p.hydroUid === t._id)?.basic?.name || t.uname })),
@@ -137,7 +141,7 @@ export class OrganizationService {
     this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain', 'avatar', 'langs', 'share']);
     const requestedId = text(input.domainId, 64, '子域 ID');
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(requestedId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
-    const name = text(input.name, 100, '名称'); const description = text(input.description ?? '', 5000, '说明');
+    const name = text(input.name, 100, '名称'); const description = text(input.description ?? '', MAX_BULLETIN_LENGTH, '子域公告');
     const data = { type: text(input.type ?? '', 80, '班型'), academicYear: text(input.academicYear ?? '', 80, '学年'), schedule: text(input.schedule ?? '', 200, '上课安排'), location: text(input.location ?? '', 200, '地点'), status: input.status as ClassDoc['status'] };
     const native: { avatar?: string; langs?: string; share?: string } = {};
     if (input.avatar !== undefined) {
@@ -183,6 +187,28 @@ export class OrganizationService {
           await this.classes.updateOne({ _id: key }, { $set: { syncState: 'ready' } });
         } catch (e) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw e; }
         return this.classDetail(uid, domainId);
+      });
+    });
+  }
+  async bulletinSave(uid: number, id: string, value: unknown) {
+    const input = object(value); this.fields(input, ['description', 'version']);
+    const description = text(input.description, MAX_BULLETIN_LENGTH, '子域公告');
+    if (!Number.isSafeInteger(input.version) || (input.version as number) < 0) throw new SmsError(400, '公告保存需要有效版本号');
+    const domain = await this.canonicalDomain(id);
+    return this.locked(domain._id, async verify => {
+      await this.requireBulletin(uid, domain._id);
+      const metadata = await this.metadata(domain._id);
+      if ((metadata?.version ?? 0) !== input.version) throw new SmsError(409, '资料已更新，请重新载入后修改');
+      return this.students.mutation(uid, 'classes.bulletin', domain._id, ['description'], async () => {
+        const key = metadata?._id || domain._id;
+        await this.classes.updateOne({ _id: key }, { $set: { domainId: domain._id, updatedAt: new Date(), updatedBy: uid, syncState: 'pending' }, $setOnInsert: { type: '', academicYear: '', schedule: '', location: '', status: 'active', teacherUids: [] }, $inc: { version: 1 } }, { upsert: true });
+        try {
+          await verify(); await this.requireBulletin(uid, domain._id);
+          const fresh = await this.domain(domain._id);
+          await this.host.edit(domain._id, { name: fresh.name || fresh._id, bulletin: description });
+          await this.classes.updateOne({ _id: key }, { $set: { syncState: 'ready' } });
+        } catch (error) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw error; }
+        return this.classDetail(uid, domain._id);
       });
     });
   }

@@ -15,8 +15,10 @@ import { RatingService } from './src/rating';
 import { hydroContestGateway, installRating } from './src/rating-hydro';
 import { AccountManagement } from './src/account-management';
 import { disableNativeDomainManagement } from './src/native-domains';
-import { OrganizationService } from './src/organization';
-import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel, TokenModel, Types, PERM } from 'hydrooj';
+import { OrganizationService, MAX_BULLETIN_LENGTH } from './src/organization';
+import { DomainMaterials } from './src/domain-materials';
+import { text } from './src/validation';
+import { Context, Handler, PRIV, ForbiddenError, UserModel, DomainModel, TokenModel, Types, PERM, StorageModel } from 'hydrooj';
 import { HydroAccounts } from './src/accounts';
 import { StudentService } from './src/service';
 import { SmsError } from './src/types';
@@ -33,6 +35,8 @@ export async function apply(ctx: Context) {
     join: (id, uid, joined) => DomainModel.setJoin(id, uid, joined),
   });
   await organization.init();
+  const materials = new DomainMaterials(ctx.db.db, service, organization, StorageModel);
+  await materials.init();
   const memberImports = new MemberImportService(ctx.db.db, service, organization);
   await memberImports.init();
   const teachers = new TeacherService(ctx.db.db, service, organization);
@@ -97,6 +101,7 @@ export async function apply(ctx: Context) {
     }
   }
   class SmsApiHandler extends Handler {
+    writeContentType = 'application/json';
     async prepare() {
       privateResponse(this);
       // Keep APIs as actual 403 JSON responses rather than Hydro's UI login redirect.
@@ -107,7 +112,7 @@ export async function apply(ctx: Context) {
         // the destination origin from the configured proxy-aware protocol/host.
         const destination = `${this.context.request.protocol}://${this.context.request.host}`;
         if (this.context.get('x-sms-request') !== '1' || !origin || origin !== destination) throw new ForbiddenError();
-        if (!this.context.is('application/json')) throw new ForbiddenError();
+        if (!this.context.is(this.writeContentType)) throw new ForbiddenError();
       }
     }
     async run(work: () => Promise<unknown>) {
@@ -122,6 +127,46 @@ export async function apply(ctx: Context) {
     }
     body() { return this.context.request.body; }
   }
+  class SmsDomainBulletinHandler extends SmsApiHandler {
+    async post() { await this.run(() => organization.bulletinSave(this.user._id, this.context.params.id, this.body())); }
+  }
+  class SmsDomainBulletinPreviewHandler extends SmsApiHandler {
+    async post() { await this.run(async () => {
+      const domain = await organization.canonicalDomain(this.context.params.id);
+      if (!await organization.canManage(this.user._id, domain._id)) throw new SmsError(403, '无权预览该子域公告');
+      const input = this.body() as Record<string, unknown>;
+      if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => key !== 'text')) throw new SmsError(400, '预览格式无效');
+      return { html: await this.renderHTML('sms_bulletin_preview.html', { text: text(input.text, MAX_BULLETIN_LENGTH, '子域公告') }) };
+    }); }
+  }
+  class SmsDomainMaterialsHandler extends SmsApiHandler {
+    writeContentType = 'multipart/form-data';
+    async get() { await this.run(() => materials.list(this.user._id, this.context.params.id)); }
+    async post() { await this.run(async () => {
+      const files = this.request.files, file = files?.file;
+      if (!file || Array.isArray(file) || Object.keys(files).length !== 1 || Object.keys((this.body() as object) || {}).length) throw new SmsError(400, '请一次上传一份学习资料');
+      return materials.upload(this.user._id, this.context.params.id, file);
+    }); }
+  }
+  class SmsDomainMaterialDownloadHandler extends Handler {
+    noCheckPermView = true;
+    async get() {
+      this.checkPriv(PRIV.PRIV_USER_PROFILE); privateResponse(this);
+      try {
+        const file = await materials.download(this.user._id, this.context.params.id);
+        this.response.type = file.mime;
+        this.response.addHeader('X-Content-Type-Options', 'nosniff');
+        this.response.addHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        const filename = encodeURIComponent(file.filename).replace(/[!'()*]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase()}`);
+        this.response.addHeader('Content-Disposition', `${file.image ? 'inline' : 'attachment'}; filename="download"; filename*=UTF-8''${filename}`);
+        this.response.body = file.body;
+      } catch (error) { if (!(error instanceof SmsError)) throw error; this.response.status = error.status; this.response.type = 'application/json'; this.response.body = { message: error.message }; }
+    }
+  }
+  ctx.Route('sms_api_domain_bulletin', '/sms/api/domains/:id/bulletin', SmsDomainBulletinHandler);
+  ctx.Route('sms_api_domain_bulletin_preview', '/sms/api/domains/:id/bulletin/preview', SmsDomainBulletinPreviewHandler);
+  ctx.Route('sms_api_domain_materials', '/sms/api/domains/:id/materials', SmsDomainMaterialsHandler);
+  ctx.Route('sms_domain_material', '/sms/materials/:id', SmsDomainMaterialDownloadHandler);
   class SmsExportHandler extends SmsApiHandler {
     async get() {
       const kind = this.context.params.kind;

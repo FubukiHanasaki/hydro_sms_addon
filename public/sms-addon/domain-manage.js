@@ -7,7 +7,7 @@
   const signature = value => JSON.stringify([value.admin, value.capabilities, value.scopes]);
   const allowed = code => identity.scopes[code] === null || identity.scopes[code]?.includes(app.dataset.manageDomain);
   const snapshot = () => JSON.stringify(fields.filter(key => !form.elements[key].disabled).map(key => [key, form.elements[key].value]));
-  const dirty = () => baseline !== undefined && snapshot() !== baseline;
+  const dirty = () => baseline !== undefined && (snapshot() !== baseline || bulletin.uploading());
   function notice(message) { $('sms-domain-notice').textContent = message; $('sms-domain-notice').hidden = !message; }
   async function api(url, body) {
     const response = await fetch(url, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-SMS-Request': '1' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
@@ -18,12 +18,14 @@
   function render(value) {
     if (revoked) return;
     current = value;
-    $('sms-domain-fields').disabled = !value.canEdit;
-    for (const key of fields) form.elements[key].value = value[key] ?? '';
+    $('sms-domain-fields').disabled = false;
+    for (const key of fields) { form.elements[key].value = value[key] ?? ''; form.elements[key].disabled = !value.canEdit; }
+    form.elements.description.disabled = !value.canEditBulletin;
+    bulletin.set(value.description, value.canEditBulletin);
     form.elements.status.disabled = !value.canEdit || !allowed('classes.archive');
     form.elements.share.disabled = !value.canEdit || !identity.admin;
     $('sms-domain-share-field').hidden = !identity.admin;
-    $('sms-domain-save').hidden = !value.canEdit; $('sms-domain-save').disabled = !value.canEdit;
+    $('sms-domain-save').hidden = !(value.canEdit || value.canEditBulletin); $('sms-domain-save').disabled = !(value.canEdit || value.canEditBulletin);
     $('sms-domain-name').textContent = value.name;
     const option = [...$('sms-domain-select').options].find(option => option.value === value.domainId);
     if (option) option.textContent = `${value.name} (${value.domainId})`;
@@ -45,7 +47,7 @@
     for (const tab of ['profile', 'members']) { const node = $(`sms-domain-tab-${tab}`); node.setAttribute('aria-selected', String(tab === name)); node.tabIndex = tab === name ? 0 : -1; }
     if (members && !membersReady) { membersReady = true; try { await globalThis.SmsDomainMembers(identity); } catch (error) { membersReady = false; notice(error.message); } }
   }
-  const requestedTab = () => location.hash === '#members' ? 'members' : location.hash === '#profile' ? 'profile' : current && !current.canEdit && allowed('classes.members') ? 'members' : 'profile';
+  const requestedTab = () => location.hash === '#members' ? 'members' : location.hash === '#profile' ? 'profile' : current && !current.canEdit && !current.canEditBulletin && allowed('classes.members') ? 'members' : 'profile';
   for (const name of ['profile', 'members']) {
     const tab = $(`sms-domain-tab-${name}`);
     tab.addEventListener('click', () => { history.pushState(null, '', `#${name}`); view(name); });
@@ -67,7 +69,8 @@
   // throttle would silently swallow retries after a validation/conflict error.
   $('sms-domain-save').addEventListener('click', event => event.stopPropagation());
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (busy || revoked || !current?.canEdit) return;
+    event.preventDefault(); if (busy || revoked || !(current?.canEdit || current?.canEditBulletin)) return;
+    if (bulletin.uploading()) { notice('资料正在上传，请完成后再保存公告'); return; }
     busy = true; $('sms-domain-save').disabled = true; $('sms-domain-reload').disabled = true; notice('');
     const data = { domainId: current.domainId, version: current.version, createDomain: false };
     for (const key of fields) {
@@ -75,9 +78,13 @@
       if (['avatar', 'langs', 'share'].includes(key) && form.elements[key].value === (current[key] ?? '')) continue;
       data[key] = key === 'status' && form.elements.status.disabled ? current.status : form.elements[key].value;
     }
-    try { const result = await api(`${app.dataset.classes}/${encodeURIComponent(current._id)}`, data); render(result); membersReady = false; $('sms-domain-status').textContent = '已保存'; }
+    $('sms-domain-fields').disabled = true; form.setAttribute('aria-busy', 'true');
+    try {
+      const result = current.canEdit ? await api(`${app.dataset.classes}/${encodeURIComponent(current._id)}`, data) : await api(`${app.dataset.domains}/${encodeURIComponent(current.domainId)}/bulletin`, { description: form.elements.description.value, version: current.version });
+      render(result); membersReady = false; $('sms-domain-status').textContent = '已保存';
+    }
     catch (error) { notice(error.message); }
-    finally { busy = false; if (!revoked) { $('sms-domain-save').disabled = false; $('sms-domain-reload').disabled = false; } }
+    finally { busy = false; form.removeAttribute('aria-busy'); if (!revoked) { $('sms-domain-fields').disabled = false; $('sms-domain-save').disabled = false; $('sms-domain-reload').disabled = false; } }
   });
   app.addEventListener('sms:domain-mutated', async () => {
     if (dirty() || busy || revoked) return;
@@ -95,7 +102,7 @@
     })(); return checking;
   }
   function revoke() {
-    revoked = true; app.hidden = true; app.inert = true;
+    revoked = true; bulletin.disable(); app.hidden = true; app.inert = true;
     const section = document.createElement('section'); section.className = 'section section__body'; section.setAttribute('role', 'alert');
     const text = document.createElement('p'); text.textContent = '访问权限已变化，请刷新页面。';
     const button = document.createElement('button'); button.type = 'button'; button.className = 'rounded button'; button.textContent = '刷新页面';
@@ -103,6 +110,7 @@
     section.append(text, button); app.before(section);
   }
   globalThis.SmsRefreshIdentity = refreshIdentity;
+  const bulletin = globalThis.SmsBulletinEditor(app, { api, onError: notice, onChange: () => { $('sms-domain-status').textContent = ''; } });
   window.addEventListener('focus', refreshIdentity);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshIdentity(); });
   setInterval(() => { if (!document.hidden) refreshIdentity(); }, 60000);
