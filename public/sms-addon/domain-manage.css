@@ -1,0 +1,36 @@
+/* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
+#sms-app.sms-domain-manage .sms-domain-heading { display: flex; align-items: center; justify-content: flex-start; gap: 24px; flex-wrap: wrap; }
+#sms-app.sms-domain-manage .sms-domain-heading .section__title { flex: 0 0 auto; margin: 0; }
+#sms-app.sms-domain-manage .sms-domain-heading .section__tools { position: static; margin-left: auto; }
+.sms-domain-tabs { display: flex; align-items: center; gap: 22px; }
+.sms-domain-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 0; font: inherit; color: inherit; cursor: pointer; }
+.sms-domain-tabs button[aria-selected="true"] { font-weight: bold; border-bottom-color: currentColor; }
+.sms-domain-context { display: flex; gap: 16px; align-items: center; padding-bottom: 0; }
+.sms-domain-context label { margin: 0; white-space: nowrap; }
+.sms-domain-context .select { flex: 1; min-width: 0; width: 100%; max-width: 100%; margin: 0; }
+.sms-domain-notices { padding-top: 0; padding-bottom: 0; }
+.sms-domain-notices p { margin: 16px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.sms-domain-notices p:empty { display: none; }
+.sms-domain-manage #sms-domain-fields { border: 0; min-width: 0; margin: 0; }
+.sms-domain-manage .sms-field { max-width: none; }
+.sms-domain-manage .sms-field .textbox, .sms-domain-manage .sms-field .select { width: 100%; max-width: 100%; box-sizing: border-box; }
+.sms-domain-manage .sms-field textarea.textbox { min-height: 260px; resize: vertical; line-height: 1.7; padding: 12px; }
+.sms-domain-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.sms-domain-form-actions .button { margin: 0; }
+.sms-domain-manage #sms-domain-native-settings summary { cursor: pointer; margin-bottom: 16px; }
+.sms-domain-manage #sms-domain-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.sms-domain-manage #sms-domain-pagination .button { margin: 0; }
+.sms-domain-info { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 16px 12px; line-height: 1.6; }
+.sms-domain-info dt, .sms-domain-info dd { margin: 0; overflow-wrap: anywhere; }
+.sms-domain-manage #sms-domain-name { overflow-wrap: anywhere; }
+.sms-domain-manage #sms-domain-members .sms-field .textbox, .sms-domain-manage #sms-domain-members .sms-field .select { height: 36px; }
+.sms-domain-manage .sms-member-import, .sms-domain-manage .sms-member-import table { background: transparent; }
+@media(max-width:767px) {
+  #sms-app.sms-domain-manage .sms-domain-heading { gap: 12px 20px; }
+  .sms-domain-heading .section__tools { width: 100%; margin: 0; }
+  .sms-domain-context { flex-direction: column; align-items: stretch; gap: 8px; }
+  .sms-domain-manage .sms-field textarea.textbox { min-height: 220px; }
+  .sms-domain-manage .sms-member-toolbar { flex-wrap: wrap; }
+  .sms-domain-manage .sms-member-toolbar > label { flex-basis: 100%; }
+  .sms-domain-manage .sms-member-toolbar-actions { margin-bottom: 12px; }
+}

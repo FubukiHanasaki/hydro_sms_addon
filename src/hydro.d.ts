@@ -7,7 +7,7 @@ export interface Context {
   db: { db: Db };
   server: { addLayer(name: string, layer: (context: any, next: () => Promise<void>) => Promise<void>): void };
   Route(name: string, path: string, handler: typeof Handler): void;
-  injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number): void;
+  injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number | ((handler: Handler) => boolean)): void;
   i18n: { load(language: string, entries: Record<string, string>): void };
   on(event: string, callback: (handler: Handler) => Promise<void | string>): void;
   effect(callback: () => (() => void)): void;

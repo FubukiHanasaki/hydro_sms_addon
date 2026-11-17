@@ -7,7 +7,7 @@ import { object, text } from './validation';
 
 export interface DomainGateway {
   create(id: string, owner: number, name: string, bulletin: string): Promise<unknown>;
-  edit(id: string, data: { name: string; bulletin: string }): Promise<unknown>;
+  edit(id: string, data: { name: string; bulletin: string; avatar?: string; langs?: string; share?: string }): Promise<unknown>;
   join(id: string, uid: number, joined: boolean): Promise<unknown>;
 }
 interface ClassDoc {
@@ -15,7 +15,10 @@ interface ClassDoc {
   location: string; status: 'active' | 'archived'; teacherUids: number[]; memberKinds?: Record<string, 'member' | 'teacher' | 'student'>; version: number;
   updatedAt: Date; updatedBy: number; syncState?: 'pending' | 'failed' | 'ready';
 }
-interface DomainDoc { _id: string; name?: string; bulletin?: string; owner: number }
+interface DomainDoc { _id: string; name?: string; bulletin?: string; avatar?: string; langs?: string; share?: string; owner: number }
+// Teacher assignment is an extra check on member management, not a standalone
+// operation. Do not offer a management page when neither workflow is allowed.
+export const DOMAIN_MANAGEMENT_ACTIONS = ['classes.update', 'classes.members'] as const;
 export class OrganizationService {
   constructor(private db: Db, private students: StudentService, private host: DomainGateway) {}
   get classes() { return this.db.collection<ClassDoc>('sms_classes'); }
@@ -62,6 +65,15 @@ export class OrganizationService {
     const ids = await this.allowedDomains(uid);
     return this.domains.find(ids ? { _id: { $in: ids } } : {}).project({ _id: 1, name: 1 }).sort({ _id: 1 }).toArray();
   }
+  async canManage(uid: number, id: string) {
+    const { scopes } = await this.students.authorization.dependencyScopes(uid, undefined, Date.now(), [...DOMAIN_MANAGEMENT_ACTIONS]);
+    return DOMAIN_MANAGEMENT_ACTIONS.some(code => scopes[code] === null || scopes[code].includes(id));
+  }
+  async managementDomains(uid: number) {
+    const { scopes } = await this.students.authorization.dependencyScopes(uid, undefined, Date.now(), [...DOMAIN_MANAGEMENT_ACTIONS]);
+    const ids = DOMAIN_MANAGEMENT_ACTIONS.map(code => scopes[code]);
+    return this.domains.find(ids.includes(null) ? {} : { _id: { $in: [...new Set(ids.flatMap(scope => scope ?? []))] } }, { projection: { _id: 1, name: 1 } }).sort({ _id: 1 }).toArray();
+  }
   async ratingScope(uid: number, currentDomain: string, value: unknown) {
     const selected = text(value ?? '', 64, '班级');
     const classes = uid > 0 ? await this.domainList(uid) : await this.domains.find({ _id: currentDomain }).project({ _id: 1, name: 1 }).toArray();
@@ -102,6 +114,7 @@ export class OrganizationService {
     const teacherProfiles = await this.db.collection('sms_teachers').find({ hydroUid: { $in: teacherUids } }, { projection: { hydroUid: 1, 'basic.name': 1 } }).toArray();
     return {
       _id: domain._id, domainId: domain._id, name: domain.name || domain._id, description: domain.bulletin || '',
+      avatar: domain.avatar || '', langs: domain.langs || '', ...(me.admin ? { share: domain.share || '' } : {}),
       type: metadata?.type || '', academicYear: metadata?.academicYear || '', schedule: metadata?.schedule || '', location: metadata?.location || '', status: metadata?.status || 'active',
       version: metadata?.version ?? 0, syncState: metadata?.syncState || 'ready', canEdit: await this.students.authorization.can(uid,'classes.update',[domain._id]),
       ...(me.admin ? { owner: domain.owner } : {}), ...(staff ? { memberCount: uids.length } : {}),
@@ -121,11 +134,22 @@ export class OrganizationService {
   }
   async classSave(uid: number, id: string | null, value: unknown) {
     const input = object(value);
-    this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain']);
+    this.fields(input, ['domainId', 'name', 'description', 'type', 'academicYear', 'schedule', 'location', 'status', 'version', 'createDomain', 'avatar', 'langs', 'share']);
     const requestedId = text(input.domainId, 64, '子域 ID');
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(requestedId)) throw new SmsError(400, '子域 ID 仅允许英文、数字、下划线及短横线');
     const name = text(input.name, 100, '名称'); const description = text(input.description ?? '', 5000, '说明');
     const data = { type: text(input.type ?? '', 80, '班型'), academicYear: text(input.academicYear ?? '', 80, '学年'), schedule: text(input.schedule ?? '', 200, '上课安排'), location: text(input.location ?? '', 200, '地点'), status: input.status as ClassDoc['status'] };
+    const native: { avatar?: string; langs?: string; share?: string } = {};
+    if (input.avatar !== undefined) {
+      native.avatar = text(input.avatar, 1000, '域图标');
+      if (/^https?:\/\//i.test(native.avatar)) native.avatar = `url:${native.avatar}`;
+      if (native.avatar && !/^(?:gravatar:[^\s]+|qq:[1-9]\d{4,}|github:[a-zA-Z0-9-]+|url:(?:https?:\/\/|\/)[^\s]+)$/i.test(native.avatar)) throw new SmsError(400, '域图标格式无效');
+    }
+    if (input.langs !== undefined) native.langs = text(input.langs, 2000, '允许的语言');
+    if (input.share !== undefined) {
+      await this.students.requireAdmin(uid);
+      native.share = text(input.share, 2000, '题目共享范围');
+    }
     if (!name || !['active', 'archived'].includes(data.status)) throw new SmsError(400, '请填写名称并选择有效状态');
     if (input.createDomain !== undefined && typeof input.createDomain !== 'boolean') throw new SmsError(400, '创建标识无效');
     const version = input.version ?? 0; if (!Number.isSafeInteger(version) || (version as number) < 0) throw new SmsError(400, '版本无效');
@@ -138,6 +162,7 @@ export class OrganizationService {
     return this.locked(domainId, async verify => {
       const previous = await this.metadata(routeMetadata?._id || domainId);
       await this.students.requireAction(uid, input.createDomain ? 'classes.create' : 'classes.update', input.createDomain ? [] : [domainId]);
+      if (input.share !== undefined) await this.students.requireAdmin(uid);
       if(previous && previous.status!==data.status) await this.students.requireAction(uid,'classes.archive',[domainId]);
       if (previous && previous.domainId !== domainId) throw new SmsError(400, '不能修改已关联的子域 ID');
       if (id && (routeMetadata ? routeMetadata.domainId !== domainId : routeDomain?._id !== domainId)) throw new SmsError(404, '班级与子域不存在');
@@ -146,12 +171,15 @@ export class OrganizationService {
       if ((previous?.version ?? 0) !== version && !recoverCreation) throw new SmsError(409, '资料已更新，请重新打开后修改');
       if (input.createDomain && domain) throw new SmsError(409, '子域 ID 已存在，请直接编辑已有班级与子域');
       if (!domain && !input.createDomain) throw new SmsError(404, '子域不存在');
-      return this.students.mutation(uid, input.createDomain ? 'classes.create' : 'classes.update', domainId, ['name', 'description', ...Object.keys(data)], async () => {
+      return this.students.mutation(uid, input.createDomain ? 'classes.create' : 'classes.update', domainId, ['name', 'description', ...Object.keys(data), ...Object.keys(native)], async () => {
         const key = previous?._id || domainId;
         await this.classes.updateOne({ _id: key }, { $set: { domainId, ...data, updatedAt: new Date(), updatedBy: uid, syncState: 'pending' }, $setOnInsert: { teacherUids: [] }, $inc: { version: 1 } }, { upsert: true });
         try {
           await verify();
-          if (domain) await this.host.edit(domainId, { name, bulletin: description }); else await this.host.create(domainId, uid, name, description);
+          if (domain) await this.host.edit(domainId, { name, bulletin: description, ...native }); else {
+            await this.host.create(domainId, uid, name, description);
+            if (Object.keys(native).length) { await verify(); await this.host.edit(domainId, { name, bulletin: description, ...native }); }
+          }
           await this.classes.updateOne({ _id: key }, { $set: { syncState: 'ready' } });
         } catch (e) { await this.classes.updateOne({ _id: key }, { $set: { syncState: 'failed' } }); throw e; }
         return this.classDetail(uid, domainId);

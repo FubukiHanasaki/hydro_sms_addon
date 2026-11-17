@@ -48,7 +48,7 @@ export async function apply(ctx: Context) {
   const bulk = new BulkService(ctx.db.db, service, accounts, new HydroAccounts(ctx.db.db, (mail, username, password) => UserModel.create(mail, username, password, undefined, '127.0.0.1', PRIV.PRIV_DEFAULT)));
   await bulk.init();
   ctx.on('handler/before-prepare', async handler => { if (handler.user?._id > 0) await organization.ensureMainMembers(handler.user._id); });
-  disableNativeDomainManagement(ctx);
+  disableNativeDomainManagement(ctx, organization);
   const rating = new RatingService(ctx.db.db, service, hydroContestGateway(ctx), () => UserModel._deleteUserCache(true, true));
   await rating.init();
   const exams = new ExamService(ctx.db.db, service, organization, rating, examHost());
@@ -76,6 +76,24 @@ export async function apply(ctx: Context) {
       privateResponse(this);
       this.response.template = 'sms_panel.html';
       this.response.body = { smsApi: this.url('sms_api_students'), smsExams: this.url('sms_api_exams'), smsMe: this.url('sms_api_me'), smsPermissions: this.url('sms_api_permissions'), smsAudit: this.url('sms_api_audit'), smsUsers: this.url('sms_api_users'), smsFilters: this.url('sms_api_student_filters'), smsDomains: this.url('sms_api_domains'), smsClasses: this.url('sms_api_classes'), smsAccounts: this.url('sms_api_accounts'), smsRating: this.url('sms_api_rating_board'), smsRatingHistory: this.url('sms_api_rating_history', { uid: 0 }).replace(/\/0$/, ''), smsRatingImport: this.url('sms_api_rating_import'), smsRatingContests: this.url('sms_api_rating_contests') };
+    }
+  }
+  class SmsDomainManageHandler extends Handler {
+    // Managing class metadata is a plugin grant, independent of permission to
+    // browse a private domain's problems. This exception applies to this page
+    // only; every mutation still uses the existing scoped plugin API.
+    noCheckPermView = true;
+    async get() {
+      this.checkPriv(PRIV.PRIV_USER_PROFILE);
+      if (!await organization.canManage(this.user._id, this.domain._id)) throw new ForbiddenError();
+      privateResponse(this);
+      this.response.template = 'sms_domain_manage.html';
+      this.response.body = {
+        smsManageDomain: this.domain._id,
+        smsManageDomains: await organization.managementDomains(this.user._id),
+        smsMe: this.url('sms_api_me', { domainId: 'system' }), smsApi: this.url('sms_api_students', { domainId: 'system' }),
+        smsClasses: this.url('sms_api_classes', { domainId: 'system' }), smsDomains: this.url('sms_api_domains', { domainId: 'system' }), smsUsers: this.url('sms_api_users', { domainId: 'system' }),
+      };
     }
   }
   class SmsApiHandler extends Handler {
@@ -310,6 +328,7 @@ export async function apply(ctx: Context) {
   ctx.Route('sms_api_classes', '/sms/api/classes', SmsClassesHandler);
   ctx.Route('sms_api_class', '/sms/api/classes/:id', SmsClassHandler);
   ctx.Route('sms_panel', '/sms', SmsPanelHandler);
+  ctx.Route('sms_domain_manage', '/sms/domain', SmsDomainManageHandler);
   ctx.Route('sms_api_me', '/sms/api/me', SmsMeHandler);
   ctx.Route('sms_api_students', '/sms/api/students', SmsStudentsHandler);
   ctx.Route('sms_api_student', '/sms/api/students/:id', SmsStudentHandler);
@@ -317,9 +336,10 @@ export async function apply(ctx: Context) {
   ctx.Route('sms_api_audit', '/sms/api/audit', SmsAuditHandler);
   ctx.Route('sms_api_users', '/sms/api/users', SmsUsersHandler);
   ctx.Route('sms_api_student_filters', '/sms/api/student-filters', SmsStudentFiltersHandler);
-  ctx.injectUI('Nav', 'sms_panel', { prefix: 'sms' }, PRIV.PRIV_USER_PROFILE);
-  ctx.i18n.load('zh', { sms_panel: '学生管理', 'Solved {0} problems': '已通过 {0} 题' });
-  ctx.i18n.load('en', { sms_panel: 'Student management' });
+  ctx.injectUI('Nav', 'sms_panel', { prefix: 'sms_panel' }, PRIV.PRIV_USER_PROFILE);
+  ctx.injectUI('Nav', 'sms_domain_manage', { prefix: 'sms_domain', before: 'domain_dashboard' }, (handler: Handler & { smsCanManageDomain?: boolean }) => !!handler.smsCanManageDomain);
+  ctx.i18n.load('zh', { sms_panel: '学生管理', sms_domain_manage: '管理域', 'Solved {0} problems': '已通过 {0} 题' });
+  ctx.i18n.load('en', { sms_panel: 'Student management', sms_domain_manage: 'Manage domain' });
   ctx.on('handler/after/UserDetail', async (handler) => {
     privateResponse(handler);
     if (!handler.user?._id || !handler.user.hasPriv(PRIV.PRIV_USER_PROFILE)) return;

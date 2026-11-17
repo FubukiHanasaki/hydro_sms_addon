@@ -8,10 +8,11 @@
     const node = el('button', cls, label); node.type = 'button';
     node.addEventListener('click', async () => { if (node.disabled) return; node.disabled = true; try { await work(); } catch (e) { error(e); } finally { node.disabled = node.hasAttribute('data-disabled'); } }); return node;
   };
-  function error(e) { const node = $('sms-org-dialog').open ? $('sms-org-error') : $('sms-notice'); node.textContent = e.message; node.hidden = false; }
+  function error(e) { const node = app.dataset.manageDomain ? $('sms-domain-notice') : $('sms-org-dialog').open ? $('sms-org-error') : $('sms-notice'); node.textContent = e.message; node.hidden = false; }
   async function api(url, body) {
     const response = await fetch(url, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-SMS-Request': '1', Accept: 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     let result; try { result = await response.json(); } catch { throw new Error('服务响应异常，请刷新后重试'); }
+    if (response.status === 403) globalThis.SmsRefreshIdentity?.();
     if (!response.ok || !Object.hasOwn(result, 'data')) throw new Error(result.message || '操作未完成，请刷新后确认'); return result.data;
   }
   function options(select, entries, current) { for (const [value, label] of entries) { const option = el('option', '', label); option.value = value; select.append(option); } select.value = current; }
@@ -32,12 +33,12 @@
     } catch (e) { if (current === domainRequest) { root.replaceChildren(); error(e); } }
   }
   for (const view of ['classes', 'domains']) {
-    $(`sms-org-tab-${view}`).addEventListener('click', () => { if(SmsUI.navigate(view==='domains'?'domains':'organization'))organizationView(view).catch(error); });
-    $(`sms-org-tab-${view}`).addEventListener('keydown', e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 'classes' : e.key === 'End' ? 'domains' : view === 'classes' ? 'domains' : 'classes'; $(`sms-org-tab-${next}`).focus(); $(`sms-org-tab-${next}`).click(); } });
+    $(`sms-org-tab-${view}`)?.addEventListener('click', () => { if(SmsUI.navigate(view==='domains'?'domains':'organization'))organizationView(view).catch(error); });
+    $(`sms-org-tab-${view}`)?.addEventListener('keydown', e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 'classes' : e.key === 'End' ? 'domains' : view === 'classes' ? 'domains' : 'classes'; $(`sms-org-tab-${next}`).focus(); $(`sms-org-tab-${next}`).click(); } });
   }
   // Submit to Hydro's original personal-favorite operation, preserving native
   // authentication, validation and cache invalidation. No membership writes.
-  $('sms-org-domain-panel').addEventListener('submit', async event => {
+  $('sms-org-domain-panel')?.addEventListener('submit', async event => {
     const form = event.target.closest('form[data-sms-domain-star]'); if (!form) return; event.preventDefault();
     const node = form.querySelector('button'); if (node.disabled) return; node.disabled = true;
     try {
@@ -47,7 +48,7 @@
       form.elements.star.value = String(!result.star); node.classList.toggle('activated', result.star); node.setAttribute('aria-pressed', String(result.star)); node.setAttribute('aria-label', result.star ? '取消收藏' : '收藏'); node.querySelector('.icon').className = `icon icon-star${result.star ? '' : '--outline'}`;
     } catch (e) { error(e); } finally { node.disabled = false; }
   });
-  async function loadClasses() {page=SmsUI.list('organization',page,{q:$('sms-class-query'),status:$('sms-class-status')});
+  async function loadClasses() {if (app.dataset.manageDomain) { app.dispatchEvent(new CustomEvent('sms:domain-mutated')); return; } page=SmsUI.list('organization',page,{q:$('sms-class-query'),status:$('sms-class-status')});
     const serial = ++request; const url = new URL(app.dataset.classes, location.origin);
     url.search = new URLSearchParams({ q: $('sms-class-query').value, status: $('sms-class-status').value, page });
     const result = await api(url); if (serial !== request) return;
@@ -56,7 +57,9 @@
     for (const c of result.classes) {
       const row = el('tr'); const name = el('td'); name.append(el('div', 'sms-student-name', c.name), el('div', 'sms-secondary', c.domainId)); row.append(name);
       for (const text of [[c.type, c.academicYear].filter(Boolean).join(' / ') || '—', c.memberCount ?? '—', c.status === 'active' ? '开班中' : '已归档']) row.append(el('td', '', text));
-      const actions = el('td'); const group = el('div', 'sms-org-actions'); group.append(button('详情', () => app.dispatchEvent(new CustomEvent('sms:class-detail', { detail: { id: c._id } })), 'link sms-link'), button(c.canEdit ? '编辑资料' : '查看资料', () => openClass(c._id), 'link sms-link'), button('成员', () => members(c._id), 'link sms-link'));
+      const actions = el('td'); const group = el('div', 'sms-org-actions'); const managed = ['classes.update','classes.members'].some(code => me.scopes[code] === null || me.scopes[code].includes(c.domainId));
+      const manageLink = (label, tab) => { const link = el('a', 'link sms-link', label); link.href = `/d/${encodeURIComponent(c.domainId)}/sms/domain#${tab}`; return link; };
+      group.append(button('详情', () => app.dispatchEvent(new CustomEvent('sms:class-detail', { detail: { id: c._id } })), 'link sms-link'), c.canEdit ? manageLink('编辑资料', 'profile') : button('查看资料', () => openClass(c._id), 'link sms-link'), managed ? manageLink('成员', 'members') : button('成员', () => members(c._id), 'link sms-link'));
       const link = el('a', 'link sms-link', '进入子域 ↗'); link.href = `/d/${encodeURIComponent(c.domainId)}/`; group.append(link); actions.append(group); row.append(actions); rows.append(row);
     }
     if (!result.total) { const row = el('tr'); const cell = el('td', 'help-text', '暂无符合条件的班级与子域'); cell.colSpan = 5; row.append(cell); rows.append(row); }
@@ -90,16 +93,16 @@
     const label = el('label', 'sms-field', '说明 / 子域公告'); inputs.description = el('textarea', 'textbox'); inputs.description.id = 'sms-org-description'; inputs.description.value = c?.description || ''; inputs.description.maxLength = 5000; label.append(inputs.description); root.append(label);
     save = async () => { const data = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value])); data.version = c?.version ?? 0; data.createDomain = !c; await api(c ? `${app.dataset.classes}/${encodeURIComponent(c._id)}` : app.dataset.classes, data); SmsUI.saved($('sms-org-dialog'));$('sms-org-dialog').close(); await loadClasses(); };
   }
-  async function members(id) {
+  async function members(id, embedded = false) {
     const c = await api(`${app.dataset.classes}/${encodeURIComponent(id)}`);
-    const editable=me.scopes['classes.members']===null||me.scopes['classes.members'].includes(c.domainId);const root = dialog(`成员 · ${c.name}`, false); const activeDialog = dialogSerial; $('sms-org-dialog').classList.add('sms-members-dialog');
+    const editable=me.scopes['classes.members']===null||me.scopes['classes.members'].includes(c.domainId);const root = embedded ? $('sms-domain-members') : dialog(`成员 · ${c.name}`, false); if (embedded) { dialogSerial++; root.replaceChildren(); } else $('sms-org-dialog').classList.add('sms-members-dialog'); const activeDialog = dialogSerial;
     let memberPage = 1; let version = c.version; let serial = 0; let busy = false;
-    const body = root.closest('.sms-dialog-body'); const toolbar = el('div', 'sms-member-toolbar'); root.append(toolbar);
+    const body = embedded ? root : root.closest('.sms-dialog-body'); const toolbar = el('div', 'sms-member-toolbar'); root.append(toolbar);
     const query = field(toolbar, 'member-search', '查找成员'); query.type = 'search'; query.placeholder = '用户名、姓名或 UID';
     let exportQuery='';const refresh = button('刷新', () => load()); const actions=el('div','sms-member-toolbar-actions');actions.append(refresh,globalThis.SmsExport.control('导出成员','members',()=>({classId:id,q:exportQuery})));toolbar.append(actions);
     const summary = el('p', 'help-text'); summary.id = 'sms-member-summary'; root.append(summary);
     const list = el('div', 'sms-member-list'); list.id = 'sms-member-list'; root.append(list);
-    const pager = $('sms-org-pagination'); pager.hidden = false;
+    const pager = $(embedded ? 'sms-domain-pagination' : 'sms-org-pagination'); pager.hidden = false;
     if (editable) {
       const add = el('div', 'sms-member-add'); const addQuery = field(add, 'account-query', '添加已有 Hydro 账号'); addQuery.placeholder = '输入用户名或 UID'; addQuery.type = 'search';
       const kind = field(add, 'member-kind', '身份', 'member', [['member','普通成员'],...(me.scopes['classes.teachers']===null||me.scopes['classes.teachers'].includes(c.domainId)?[['teacher','任课教师']]:[]),['student',id==='system'?'学生':'学生（需档案）']]);
@@ -118,7 +121,7 @@
       const importButton = button('批量导入', () => { if (!busy && !uploading) file.click(); }); importButton.id = 'sms-member-import-open';
       file.addEventListener('change', async () => {
         const selectedFile = file.files[0]; file.value = ''; if (!selectedFile || uploading || busy) return;
-        uploading = true; importButton.disabled = true; $('sms-org-error').textContent = ''; $('sms-org-error').hidden = true;
+        uploading = true; importButton.disabled = true; const notice = $(embedded ? 'sms-domain-notice' : 'sms-org-error'); notice.textContent = ''; notice.hidden = true;
         try {
           if (!/\.(xlsx|csv)$/i.test(selectedFile.name) || selectedFile.size > 2 * 1024 * 1024) throw new Error('请选择不超过 2 MB 的 XLSX 或 CSV 文件');
           await cancelPreview();
@@ -142,7 +145,7 @@
         } catch (e) { error(e); } finally { uploading = false; importButton.disabled = false; }
       });
       importButton.title = '第一行表头为 UID，支持 XLSX / CSV，每次最多 200 人';
-      $('sms-org-dialog').addEventListener('close', () => { cancelPreview().catch(() => {}); }, { once: true });
+      if (!embedded) $('sms-org-dialog').addEventListener('close', () => { cancelPreview().catch(() => {}); }, { once: true });
       addActions.append(importButton, confirm); controls.append(selected, addActions); add.append(results, controls, file); root.prepend(add); add.after(preview);
 
       let timer; let accountRequest = 0;
@@ -179,6 +182,10 @@
     }
     let timer; query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { memberPage = 1; load().catch(error); }, 250); }); query.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); memberPage = 1; load().catch(error); } });
     body.scrollTop = 0; await load();
+  }
+  if (app.dataset.manageDomain) {
+    globalThis.SmsDomainMembers = async identity => { me = identity; await members(app.dataset.manageDomain, true); };
+    return;
   }
   $('sms-org-close').addEventListener('click', () => $('sms-org-dialog').close()); $('sms-org-cancel').addEventListener('click', () => $('sms-org-dialog').close());
   $('sms-org-dialog').addEventListener('close', () => { dialogSerial++; });

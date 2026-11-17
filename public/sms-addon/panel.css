@@ -2,7 +2,7 @@
  * Visual tokens and components come from Hydro's active theme.
  * Only panel layout, responsive sizing and native dialog mechanics live here.
  */
-.sms-shell [hidden] {
+.sms-shell[hidden], .sms-shell [hidden] {
   display: none !important;
 }
 .sms-shell .sms-main,

@@ -17,7 +17,7 @@
         {{ ddoc.name }} ({{ ddoc._id }})
       </td>
       <td>{{ role[ddoc._id]|default('default') }}</td>
-      <td><a class="typo-a" href="{{ url('homepage', domainId=ddoc._id) }}">{{ _('Visit') }}</a></td>
+      <td><a class="typo-a" href="{{ url('homepage', domainId=ddoc._id) }}">{{ _('Visit') }}</a>{% if smsManagedDomainIds.includes(ddoc._id) %} · <a class="typo-a" href="{{ url('sms_domain_manage', domainId=ddoc._id) }}">管理域</a>{% endif %}</td>
     </tr>
   {% else %}
     <tr><td colspan="4">暂无已加入的子域</td></tr>

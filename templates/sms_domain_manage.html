@@ -1,0 +1,58 @@
+{% extends "layout/basic.html" %}
+{% block content %}
+<link rel="stylesheet" href="/sms-addon/panel.css?build=domain-manage-20261117">
+<link rel="stylesheet" href="/sms-addon/domain-manage.css?build=20261117">
+<div id="sms-app" class="row sms-shell sms-domain-manage" data-manage-domain="{{ smsManageDomain }}" data-me="{{ smsMe }}" data-api="{{ smsApi }}" data-classes="{{ smsClasses }}" data-domains="{{ smsDomains }}" data-users="{{ smsUsers }}">
+  <main class="medium-9 columns sms-main">
+    <section class="section visible">
+      <header class="section__header sms-domain-heading">
+        <h1 class="section__title">管理域</h1>
+        <div class="sms-domain-tabs" role="tablist" aria-label="域管理">
+          <button id="sms-domain-tab-profile" type="button" role="tab" aria-selected="true" aria-controls="sms-domain-profile-panel">域资料</button>
+          <button id="sms-domain-tab-members" type="button" role="tab" aria-selected="false" aria-controls="sms-domain-members-panel" tabindex="-1">成员管理</button>
+        </div>
+        <div class="section__tools"><a class="link" href="{{ url('homepage') }}">进入子域 ↗</a></div>
+      </header>
+      <div class="section__body sms-domain-context">
+        <label for="sms-domain-select">当前子域</label>
+        <select id="sms-domain-select" class="select">
+          {% for domain in smsManageDomains %}<option value="{{ domain._id }}"{% if domain._id == smsManageDomain %} selected{% endif %}>{{ domain.name }} ({{ domain._id }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="section__body sms-domain-notices"><p id="sms-domain-notice" role="alert" hidden></p><p id="sms-domain-status" role="status" aria-live="polite">加载中…</p></div>
+      <div id="sms-domain-profile-panel" role="tabpanel" aria-labelledby="sms-domain-tab-profile">
+        <form id="sms-domain-profile-form">
+          <fieldset id="sms-domain-fields" class="section__body" disabled>
+            <div class="sms-form-grid">
+              <label class="sms-field">班级与子域名称<input type="text" name="name" class="textbox" maxlength="100" required></label>
+              <label class="sms-field">子域 ID<input type="text" id="sms-domain-id" class="textbox" value="{{ smsManageDomain }}" readonly></label>
+              <label class="sms-field">班型<input type="text" name="type" class="textbox" maxlength="80"></label>
+              <label class="sms-field">学年<input type="text" name="academicYear" class="textbox" maxlength="80"></label>
+              <label class="sms-field">上课安排<input type="text" name="schedule" class="textbox" maxlength="200"></label>
+              <label class="sms-field">上课地点<input type="text" name="location" class="textbox" maxlength="200"></label>
+              <label class="sms-field">状态<select name="status" class="select"><option value="active">开班中</option><option value="archived">已归档</option></select></label>
+              <label class="sms-field">域图标<input type="text" name="avatar" class="textbox" maxlength="1000" placeholder="url:https://… / qq:… / github:…"></label>
+            </div>
+            <label class="sms-field">说明 / 子域公告<textarea name="description" class="textbox" maxlength="5000" rows="12"></textarea></label>
+            <details id="sms-domain-native-settings"><summary>更多域设置</summary><div class="sms-form-grid">
+              <label class="sms-field">允许的语言<input type="text" name="langs" class="textbox" maxlength="2000"></label>
+              <label id="sms-domain-share-field" class="sms-field" hidden>题目共享范围<input type="text" name="share" class="textbox" maxlength="2000" disabled></label>
+            </div></details>
+          </fieldset>
+          <footer class="section__footer sms-domain-form-actions"><button type="button" id="sms-domain-reload" class="rounded button">重新载入资料</button><button id="sms-domain-save" type="submit" class="primary rounded button" disabled hidden>保存资料</button></footer>
+        </form>
+      </div>
+      <div id="sms-domain-members-panel" role="tabpanel" aria-labelledby="sms-domain-tab-members" hidden>
+        <div id="sms-domain-members" class="section__body"></div>
+        <div id="sms-domain-pagination" class="section__footer sms-org-pagination"></div>
+      </div>
+    </section>
+  </main>
+  <aside class="medium-3 columns sms-sidebar" aria-label="当前子域">
+    <section class="section side visible"><div class="section__header"><h2 id="sms-domain-name" class="section__title">{{ handler.domain.name }}</h2></div><div class="section__body"><dl class="sms-domain-info"><dt>子域 ID</dt><dd>{{ smsManageDomain }}</dd><dt>任课教师</dt><dd id="sms-domain-teachers">—</dd><dt>成员</dt><dd id="sms-domain-count">—</dd></dl></div><ol class="menu"><li class="menu__item"><a class="menu__link" href="{{ url('sms_panel') }}#organization"><span class="icon icon-web" aria-hidden="true"></span> 班级与子域</a></li><li class="menu__item"><a class="menu__link" href="{{ url('sms_panel') }}#exams"><span class="icon icon-award" aria-hidden="true"></span> 模拟赛管理</a></li></ol></section>
+  </aside>
+</div>
+<script src="/sms-addon/exports.js?v=20261022-quiet-exports" defer></script>
+<script src="/sms-addon/organization.js?build=domain-manage-20261117" defer></script>
+<script src="/sms-addon/domain-manage.js?build=20261117" defer></script>
+{% endblock %}
