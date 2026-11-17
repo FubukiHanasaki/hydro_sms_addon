@@ -17,34 +17,62 @@
 .sms-domain-manage .sms-field textarea.textbox { min-height: 260px; resize: vertical; line-height: 1.7; padding: 12px; }
 .sms-domain-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .sms-domain-form-actions .button { margin: 0; }
-.sms-domain-manage #sms-domain-native-settings summary, .sms-domain-manage #sms-domain-class-settings summary { cursor: pointer; margin-bottom: 16px; }
-.sms-domain-manage #sms-domain-class-settings { margin: 0 0 20px; }
+/* Keep the editor and disclosure styling local to the management page. */
+.sms-domain-manage #sms-domain-class-settings, .sms-domain-manage #sms-domain-native-settings { border: 1px solid rgba(128,128,128,.22); border-radius: 6px; }
+.sms-domain-manage #sms-domain-class-settings { margin: 0 0 24px; }
 .sms-domain-manage #sms-domain-native-settings { margin-top: 20px; }
-.sms-bulletin-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-.sms-bulletin-heading label { margin: 0; }
-.sms-bulletin-views, .sms-bulletin-toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.sms-bulletin-editor .tool-button { font: inherit; color: inherit; padding: 6px 9px; margin: 0; border: 1px solid transparent; background: transparent; cursor: pointer; line-height: 1.4; }
-.sms-bulletin-editor .tool-button:disabled { opacity: .45; cursor: default; }
-.sms-bulletin-views .tool-button[aria-pressed="true"] { font-weight: bold; border-bottom-color: currentColor; }
-.sms-bulletin-toolbar { border: 1px solid rgba(128,128,128,.3); border-bottom: 0; padding: 6px; }
-.sms-bulletin-panes { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); border: 1px solid rgba(128,128,128,.3); min-width: 0; }
-.sms-domain-manage .sms-bulletin-panes > textarea.textbox { margin: 0; border: 0; box-shadow: none; min-height: 400px; height: 440px; resize: vertical; font-family: Consolas, monospace; font-size: 14px; line-height: 1.7; }
-.sms-bulletin-panes > .typo { min-width: 0; padding: 16px; overflow: auto; max-height: 680px; overflow-wrap: anywhere; border-left: 1px solid rgba(128,128,128,.3); }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; padding: 12px 16px; font-size: 14px; line-height: 1.5; }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > summary::-webkit-details-marker { display: none; }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > summary::before { content: ''; width: 6px; height: 6px; flex: 0 0 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials)[open] > summary::before { transform: rotate(45deg); }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > summary:hover { background: rgba(128,128,128,.06); }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > summary:focus-visible, .sms-bulletin-editor .tool-button:focus-visible { outline: 2px solid #5f9fd6; outline-offset: -2px; }
+.sms-domain-manage #sms-domain-class-settings[open] > summary, .sms-domain-manage #sms-domain-native-settings[open] > summary { border-bottom: 1px solid rgba(128,128,128,.18); }
+.sms-domain-manage :is(#sms-domain-class-settings, #sms-domain-native-settings, #sms-bulletin-materials) > .sms-form-grid { padding: 16px; margin-bottom: 0; }
+.sms-bulletin-editor { border: 1px solid rgba(128,128,128,.28); border-radius: 8px; overflow: hidden; }
+.sms-bulletin-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; background: rgba(128,128,128,.035); }
+.sms-bulletin-heading label { margin: 0; font-weight: 600; font-size: 16px; }
+.sms-bulletin-views { display: flex; gap: 2px; padding: 3px; border: 1px solid rgba(128,128,128,.18); border-radius: 6px; }
+.sms-bulletin-editor .tool-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; min-width: 32px; padding: 0 7px; margin: 0; border: 1px solid transparent; border-radius: 4px; font: inherit; font-size: 14px; color: inherit; background: transparent; cursor: pointer; line-height: 1; }
+.sms-bulletin-editor .tool-button svg { flex-shrink: 0; }
+.sms-bulletin-editor .tool-button:hover:not(:disabled) { background: rgba(128,128,128,.11); }
+.sms-bulletin-editor .tool-button:disabled { opacity: .4; cursor: default; }
+.sms-bulletin-editor .tool-button[data-format="H"], .sms-bulletin-editor .tool-button[data-format="B"] { font-weight: 700; font-size: 17px; }
+.sms-bulletin-editor .tool-button[data-format="I"] { font: italic 18px Georgia, serif; }
+.sms-bulletin-views .tool-button { height: 28px; padding: 0 12px; }
+.sms-bulletin-views .tool-button[aria-pressed="true"] { font-weight: 600; background: var(--sms-editor-surface, #fff); border-color: rgba(128,128,128,.2); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.sms-bulletin-toolbar { display: flex; align-items: center; gap: 6px 0; flex-wrap: wrap; padding: 8px 10px; border-block: 1px solid rgba(128,128,128,.2); }
+.sms-bulletin-tool-group { display: flex; align-items: center; gap: 2px; border-right: 1px solid rgba(128,128,128,.2); margin-right: 8px; padding-right: 8px; }
+.sms-bulletin-tool-group-end { border-right: 0; padding-right: 0; margin-right: 0; margin-left: auto; }
+.sms-bulletin-panes { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.08fr); height: 440px; min-height: 320px; max-height: 1000px; resize: vertical; overflow: hidden; }
+.sms-domain-manage .sms-bulletin-panes > textarea.textbox { min-width: 0; min-height: 0; height: 100%; width: 100%; padding: 20px; margin: 0; border: 0; border-radius: 0; box-shadow: none; resize: none; font-family: Consolas, monospace; font-size: 14px; line-height: 1.85; box-sizing: border-box; background: rgba(128,128,128,.025); }
+.sms-domain-manage .sms-bulletin-panes > textarea.textbox:focus { outline: 2px solid rgba(95,159,214,.5); outline-offset: -2px; }
+.sms-bulletin-panes > .typo { min-width: 0; min-height: 0; padding: 22px 24px; overflow: auto; overflow-wrap: anywhere; border-left: 1px solid rgba(128,128,128,.2); }
+#sms-bulletin-preview > :first-child { margin-top: 0; }
+#sms-bulletin-preview h1 { font-size: 26px; }
+#sms-bulletin-preview h2 { font-size: 21px; }
 .sms-bulletin-panes img { max-width: 100%; }
 .sms-bulletin-panes table { display: block; max-width: 100%; overflow-x: auto; }
 .sms-bulletin-editor[data-mode="edit"] .sms-bulletin-panes, .sms-bulletin-editor[data-mode="preview"] .sms-bulletin-panes { grid-template-columns: minmax(0,1fr); }
 .sms-bulletin-editor[data-mode="edit"] #sms-bulletin-preview, .sms-bulletin-editor[data-mode="preview"] #sms-bulletin-source { display: none; }
-.sms-bulletin-editor[data-mode="preview"] #sms-bulletin-preview { border-left: 0; min-height: 320px; }
+.sms-bulletin-editor[data-mode="preview"] #sms-bulletin-preview { border-left: 0; }
 .sms-bulletin-editor[data-mode="preview"] #sms-bulletin-toolbar { display: none; }
-.sms-bulletin-editor #sms-bulletin-message { margin: 10px 0; line-height: 1.6; }
-.sms-bulletin-editor #sms-bulletin-materials { margin-top: 16px; }
-.sms-bulletin-editor #sms-bulletin-materials summary { cursor: pointer; }
-.sms-bulletin-file { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,.2); }
-.sms-bulletin-file > a { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.sms-bulletin-file > span, .sms-bulletin-file > button { flex-shrink: 0; }
-#sms-app .sms-bulletin-editor.is-fullscreen { position: fixed; inset: 12px; z-index: 10000; padding: 20px; overflow: auto; box-sizing: border-box; background: var(--sms-editor-surface, #fff); box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.sms-bulletin-editor #sms-bulletin-message { margin: 0; padding: 12px 16px; border-top: 1px solid rgba(128,128,128,.18); line-height: 1.6; }
+.sms-bulletin-editor #sms-bulletin-materials { border-top: 1px solid rgba(128,128,128,.2); }
+#sms-bulletin-file-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 21px; padding: 0 6px; border-radius: 4px; background: rgba(128,128,128,.1); font-size: 12px; }
+#sms-bulletin-file-count:empty { display: none; }
+#sms-bulletin-files { padding: 0 16px; max-height: 300px; overflow: auto; }
+#sms-bulletin-files > p { padding: 8px 0 16px; margin: 0; }
+.sms-bulletin-file { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid rgba(128,128,128,.16); }
+.sms-bulletin-file-type { display: flex; align-items: center; justify-content: center; flex: 0 0 38px; height: 42px; border: 1px solid rgba(128,128,128,.24); border-radius: 5px; background: rgba(128,128,128,.045); font: 600 10px Consolas, monospace; letter-spacing: .3px; }
+.sms-bulletin-file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; line-height: 1.4; }
+.sms-bulletin-file-info > a { overflow-wrap: anywhere; }
+.sms-bulletin-file-info > span { font-size: 12px; }
+.sms-bulletin-file > button { flex-shrink: 0; padding: 6px 0 6px 10px; }
+#sms-app .sms-bulletin-editor.is-fullscreen { display: flex; flex-direction: column; position: fixed; inset: 16px; width: auto; height: auto; margin: 0; padding: 0; z-index: 10000; overflow: auto; box-sizing: border-box; color: inherit; background: var(--sms-editor-surface, #fff); box-shadow: 0 12px 50px rgba(0,0,0,.2), 0 0 0 100vmax rgba(0,0,0,.45); }
+#sms-app .sms-bulletin-editor.is-fullscreen .sms-bulletin-heading, #sms-app .sms-bulletin-editor.is-fullscreen .sms-bulletin-toolbar, #sms-app .sms-bulletin-editor.is-fullscreen #sms-bulletin-materials { flex-shrink: 0; }
+#sms-app .sms-bulletin-editor.is-fullscreen .sms-bulletin-panes { flex: 1; min-height: 240px; height: auto; resize: none; }
 .theme--dark .sms-bulletin-editor { --sms-editor-surface: #323334; }
-#sms-app .sms-bulletin-editor.is-fullscreen .sms-bulletin-panes > textarea { height: calc(100dvh - 210px); }
 .sms-domain-manage #sms-domain-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .sms-domain-manage #sms-domain-pagination .button { margin: 0; }
 .sms-domain-info { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 16px 12px; line-height: 1.6; }
@@ -60,9 +88,20 @@
   .sms-domain-manage .sms-member-toolbar { flex-wrap: wrap; }
   .sms-domain-manage .sms-member-toolbar > label { flex-basis: 100%; }
   .sms-domain-manage .sms-member-toolbar-actions { margin-bottom: 12px; }
-  .sms-bulletin-panes { grid-template-columns: minmax(0,1fr); }
-  .sms-bulletin-panes > .typo { border-left: 0; border-top: 1px solid rgba(128,128,128,.3); max-height: 420px; }
-  .sms-domain-manage .sms-bulletin-panes > textarea.textbox { min-height: 280px; height: 320px; }
-  #sms-app .sms-bulletin-editor.is-fullscreen { inset: 4px; padding: 12px; }
-  .sms-bulletin-toolbar .tool-button { padding: 8px; }
+  .sms-bulletin-heading { padding: 12px; gap: 10px; }
+  .sms-bulletin-heading label { font-size: 15px; }
+  .sms-bulletin-views .tool-button { padding-inline: 9px; }
+  .sms-bulletin-toolbar { padding: 7px; gap: 6px 0; }
+  .sms-bulletin-toolbar .tool-button { min-width: 30px; padding-inline: 5px; }
+  .sms-bulletin-toolbar .tool-button-label { gap: 4px; font-size: 13px; }
+  .sms-bulletin-tool-group { margin-right: 5px; padding-right: 5px; }
+  .sms-bulletin-tool-group-end { margin-right: 0; padding-right: 0; }
+  .sms-bulletin-panes { grid-template-columns: minmax(0,1fr); height: 360px; min-height: 280px; }
+  .sms-bulletin-editor[data-mode="split"] .sms-bulletin-panes { height: 640px; grid-template-rows: 1fr 1fr; }
+  .sms-bulletin-panes > .typo { border-left: 0; border-top: 1px solid rgba(128,128,128,.2); padding: 18px; }
+  .sms-bulletin-editor[data-mode="preview"] .sms-bulletin-panes > .typo { border-top: 0; }
+  .sms-domain-manage .sms-bulletin-panes > textarea.textbox { padding: 16px; min-height: 0; height: 100%; }
+  #sms-app .sms-bulletin-editor.is-fullscreen { inset: 6px; }
+  .sms-bulletin-file { gap: 10px; }
+  .sms-bulletin-file-type { flex-basis: 32px; height: 36px; }
 }
