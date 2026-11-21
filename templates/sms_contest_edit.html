@@ -9,6 +9,10 @@
       <div class="medium-6 columns"><label>比赛类型<select name="smsExamType">{% for kind in smsEditor.examTypes %}<option value="{{ kind }}"{% if kind == smsEditor.exam.examType %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select></label></div>
       <div class="medium-6 columns"><label>比赛难度<select name="smsDifficulty">{% for level in smsEditor.difficulties %}<option value="{{ level }}"{% if level == smsEditor.difficulty %} selected{% endif %}>{{ level }}</option>{% endfor %}</select></label></div>
     </div>
+    <div class="row">
+      <div class="medium-6 columns"><label>比赛显示<select name="smsVisibility"><option value="visible"{% if smsEditor.visibility == 'visible' %} selected{% endif %}>正常显示</option><option value="hidden"{% if smsEditor.visibility == 'hidden' %} selected{% endif %}>保持隐藏</option><option value="until"{% if smsEditor.visibility == 'until' %} selected{% endif %}>指定时间前隐藏</option></select></label></div>
+      <div class="medium-6 columns" id="sms-visible-at"><label>公开时间（北京时间）<input class="textbox" type="datetime-local" name="smsVisibleAt" value="{{ smsEditor.visibleAt }}"></label></div>
+    </div>
     <label>说明<textarea class="textbox" name="smsRemark" maxlength="2000" rows="3">{{ smsEditor.exam.remark }}</textarea></label>
   </div>
 </div>
@@ -21,6 +25,9 @@
  const target=settings?.previousElementSibling;
  if(target)target.before(fields);else form.append(fields);
  fields.hidden=false;
+ const visibility=fields.querySelector('[name="smsVisibility"]'),until=fields.querySelector('[name="smsVisibleAt"]');
+ const syncVisibility=()=>{const timed=visibility.value==='until';document.getElementById('sms-visible-at').hidden=!timed;until.disabled=!timed;until.required=timed;};
+ visibility.addEventListener('change',syncVisibility);syncVisibility();
  {% if not smsEditor.canDelete %}form.querySelector('button[value="delete"]')?.remove();{% endif %}
  // One Rated control for both Hydro and SMS, including explicit false.
  const rated=form.querySelector('input[type="checkbox"][name="rated"]');

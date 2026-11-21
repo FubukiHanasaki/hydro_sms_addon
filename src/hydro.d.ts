@@ -9,6 +9,7 @@ export interface Context {
   Route(name: string, path: string, handler: typeof Handler): void;
   injectUI(node: string, name: string, args: Record<string, unknown>, privilege: number | ((handler: Handler) => boolean)): void;
   i18n: { load(language: string, entries: Record<string, string>): void };
+  on(event: 'contest/list', callback: (filter: Record<string, any>, handler: Handler) => Promise<void>): void;
   on(event: string, callback: (handler: Handler) => Promise<void | string>): void;
   effect(callback: () => (() => void)): void;
 }
@@ -61,7 +62,7 @@ export const DomainModel: {
   setJoin(id: string, uid: number, join: boolean): Promise<unknown>;
 };
 
-export const ContestModel: { get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getStatus(domainId: string, id: import('mongodb').ObjectId, uid: number): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; canShowRecord: any; canShowSelfRecord: any; applyProjection: any; };
+export const ContestModel: { getMulti(domainId: string, query: any): import('mongodb').FindCursor<any>; getListStatus(domainId: string, uid: number, ids: import('mongodb').ObjectId[]): Promise<Record<string, any>>; get(domainId: string, id: import('mongodb').ObjectId): Promise<any>; getStatus(domainId: string, id: import('mongodb').ObjectId, uid: number): Promise<any>; getMultiStatus(domainId: string, query: any): any; RULES: Record<string, any>; canShowRecord: any; canShowSelfRecord: any; applyProjection: any; };
 export const ProblemModel: { get(domainId: string, pid: number): Promise<any> };
 export const PERM: { PERM_READ_RECORD_CODE: bigint; PERM_READ_RECORD_CODE_ACCEPT: bigint; PERM_VIEW: bigint; PERM_VIEW_RANKING: bigint; PERM_VIEW_CONTEST: bigint; PERM_VIEW_HIDDEN_CONTEST: bigint; PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD: bigint; PERM_CREATE_CONTEST: bigint; PERM_EDIT_CONTEST: bigint; PERM_EDIT_CONTEST_SELF: bigint; PERM_CREATE_PROBLEM: bigint; PERM_EDIT_PROBLEM: bigint; PERM_EDIT_PROBLEM_SELF: bigint; PERM_REJUDGE_PROBLEM: bigint; PERM_REJUDGE: bigint; PERM_VIEW_PROBLEM: bigint; PERM_VIEW_PROBLEM_HIDDEN: bigint };
 export const RecordModel: any;

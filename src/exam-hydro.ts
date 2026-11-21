@@ -1,4 +1,5 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
+import { visibilitySettings } from './exam-visibility';
 import { captureNative, resultFingerprint } from './exam-native';
 import { ObjectId } from 'mongodb';
 import { Context, ContestModel, DomainModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError, ValidationError } from 'hydrooj';
@@ -33,6 +34,7 @@ export function installExams(ctx:Context,exams:ExamService){
   const inScope=(p:bigint)=>(sessionScope&p)===p;
   if(action&&!(action==='create'?inScope(PERM.PERM_CREATE_CONTEST):inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF)))throw new ForbiddenError();
   const inspect=(id?canEdit:await exams.nativeAllowed(actor,domain,undefined,'exams.update'))&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF));
+  if(id)try{await exams.assertVisible(actor,domain,id,canEdit&&(inScope(PERM.PERM_EDIT_CONTEST)||inScope(PERM.PERM_EDIT_CONTEST_SELF)));}catch(err){if(err instanceof SmsError)throw new ForbiddenError();throw err;}
   base.scope=sessionScope;
   const user=Object.assign(Object.create(Object.getPrototypeOf(base)),base),mapped=new Map([[PERM.PERM_CREATE_CONTEST,canCreate],[PERM.PERM_EDIT_CONTEST,canEdit],[PERM.PERM_EDIT_CONTEST_SELF,canEdit],[PERM.PERM_VIEW_HIDDEN_CONTEST,inspect],[PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD,inspect]]);
   const mappedMask=[...mapped.keys()].reduce((mask,p)=>mask|p,0n),nativePerm=BigInt(base.perm);
@@ -45,6 +47,31 @@ export function installExams(ctx:Context,exams:ExamService){
  for(const name of ['ContestManagement','ContestUser','ContestClarification','ContestBalloon','ContestCode'])ctx.on(`handler/before-prepare/${name}`,async(h:any)=>{await scopeNative(h,'update');});
  for(const name of ['ContestList','ContestDetail','ContestProblemList','ContestScoreboard','ContestFileDownload','ContestPrint'])ctx.on(`handler/before-prepare/${name}`,async(h:any)=>{
   await scopeNative(h); // File downloads retain Hydro's participant/time checks.
+ });
+ // Apply the filter before native pagination/counting. Never repurpose assign
+ // (native group membership) or a problem's hidden flag for contest visibility.
+ const hiddenIds=async(h:any)=>exams.hiddenIds(h.user?._id??0,h.domain._id,async(id)=>{
+  const session=BigInt(h.session?.scope??h.user.scope??0);
+  return !!(session&PERM.PERM_EDIT_CONTEST||session&PERM.PERM_EDIT_CONTEST_SELF)&&await exams.nativeAllowed(h.user?._id??0,h.domain._id,id,'exams.update');
+ });
+ ctx.on('contest/list',async(filter:any,h:any)=>{
+  const ids=await hiddenIds(h);if(ids.length)filter.$and=[...(filter.$and??[]),{docId:{$nin:ids}}];
+  h.response.addHeader('Cache-Control','private, no-store');
+ });
+ ctx.on('handler/before/Home',async(h:any)=>{
+  if(!h.getContest)return;
+  h.getContest=async(domainId:string,limit=10)=>{
+   if(!h.user.hasPerm(PERM.PERM_VIEW_CONTEST))return [[],{}];
+   const inspect=h.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST);
+   const groups=(await UserModel.listGroup(domainId,inspect?undefined:h.user._id)).map((g:any)=>g.name);
+   const filter:any={rule:{$in:Object.keys(ContestModel.RULES).filter(rule=>!ContestModel.RULES[rule].hidden)},
+    ...inspect?{}:{$or:[{maintainer:h.user._id},{owner:h.user._id},{assign:{$in:groups}},{assign:{$size:0}}]}};
+   const ids=await hiddenIds(h);if(ids.length)filter.docId={$nin:ids};
+   // Filter before limit so hidden contests do not consume homepage slots.
+   const docs=await ContestModel.getMulti(domainId,filter).sort({endAt:-1,beginAt:-1,_id:-1}).limit(limit).toArray();
+   return [docs,await ContestModel.getListStatus(domainId,h.user._id,docs.map((c:any)=>c.docId))];
+  };
+  h.response.addHeader('Cache-Control','private, no-store');
  });
  // The native problem UI and submission response consult the same hidden-score
  // permissions as record routes. Do not advertise results that those routes
@@ -92,8 +119,13 @@ export function installExams(ctx:Context,exams:ExamService){
  for(const name of ['RecordDetail','RecordList'])ctx.on(`handler/before-prepare/${name}`,scopeRecords);
  const recordAccess=async(h:any,record:any,current:any)=>{
   if(h.allDomain&&(!current.hasPriv(PRIV.PRIV_MANAGE_ALL_DOMAIN)||!await exams.globalRecordAccess(h.user._id)))throw new ForbiddenError();
-  const id=String(record?.contest??'');if(!/^[a-f\d]{24}$/i.test(id)||id.startsWith('0'.repeat(23)))return null;
+  // Native record-list/WS projections omit correction markers; resolve their
+  // source before deciding that a record is unrelated to a hidden contest.
+  if(record?._id&&!record.contest&&!record.smsCorrection&&!record.offlineCorrection){const source=await RecordModel.coll.findOne({_id:record._id,domainId:record.domainId},{projection:{contest:1,smsCorrection:1,offlineCorrection:1}});record={...record,...source};}
+  const id=String(record?.contest??record?.smsCorrection?.contestId??record?.offlineCorrection?.contestId??'');if(!/^[a-f\d]{24}$/i.test(id)||id.startsWith('0'.repeat(23)))return null;
   try{
+   await exams.assertVisible(h.user._id,record.domainId,id);
+   if(!record.contest)return null;
    if(record.domainId!==h.domain._id&&!h.allDomain)throw new ForbiddenError();
    const domain=record.domainId===h.domain._id?h.domain:await DomainModel.get(record.domainId);if(!domain)throw new ForbiddenError();
    const user=await(await UserModel.getById(domain._id,h.user._id)).private();user.scope=BigInt(h.session?.scope??h.user.scope);
@@ -105,10 +137,10 @@ export function installExams(ctx:Context,exams:ExamService){
    if(c.assign?.length&&!local.user.own(c)&&!local.user.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST)&&!c.assign.some((g:string)=>local.user.group?.includes(g)))throw new ForbiddenError();
    if(!local.user.own(c)&&!(record.uid===local.user._id?ContestModel.canShowSelfRecord.call(local,c,true):ContestModel.canShowRecord.call(local,c,true)))throw new ForbiddenError();
    return {contest:c,own:local.user.own(c),user:local.user};
-  }catch(error){if(error instanceof ForbiddenError)(error as any).smsRecordFiltered=true;throw error;}
+  }catch(error){if(error instanceof SmsError)error=new ForbiddenError();if(error instanceof ForbiddenError)(error as any).smsRecordFiltered=true;throw error;}
  };
  ctx.on('handler/after/RecordList',async(h:any)=>{
-  const body=h.response.body;if(!Array.isArray(body?.rdocs)||!body.rdocs.some((r:any)=>r.contest))return;
+  const body=h.response.body;if(!Array.isArray(body?.rdocs))return;
   const local=Object.assign(Object.create(h),{allDomain:!!body.allDomain}),current=await UserModel.getById(h.domain._id,h.user._id),visible=[];
   for(const record of body.rdocs)try{await recordAccess(local,record,current);visible.push(record);}catch(error){if(!(error instanceof ForbiddenError))throw error;}
   body.rdocs=visible;
@@ -153,6 +185,7 @@ export function installExams(ctx:Context,exams:ExamService){
   h.postUpdate=async(...args:any[])=>{
    try {
     if(id&&!Object.hasOwn(b,'smsVersion'))throw new SmsError(409,'请刷新比赛编辑页后重试');
+    const visibility=visibilitySettings({visibility:b.smsVisibility,visibleAt:b.smsVisibleAt},existing??{});
     if(!id){
      await exams.requireReady();await exams.requireNative(h.user._id,h.domain._id,undefined,'exams.create');await exams.requireNative(h.user._id,h.domain._id,undefined,'exams.update');
      // Validate every SMS field before Hydro creates its document.
@@ -161,7 +194,7 @@ export function installExams(ctx:Context,exams:ExamService){
      text(b.smsExamType??'模拟赛',80,'比赛类型');text(b.smsRemark??'',2000,'说明');
      if(!editor.difficulties.includes(b.smsDifficulty??'CSP-J'))throw new SmsError(400,'模拟赛设置无效');
     }
-    const payload={domainId:h.domain._id,contestId:id,version:id?Number(b.smsVersion??0):0,
+    const payload={...visibility,domainId:h.domain._id,contestId:id,version:id?Number(b.smsVersion??0):0,
      classIds:existing?.classIds??[h.domain._id],
      examType:b.smsExamType??'模拟赛',scope:existing?.scope??'',source:existing?.source??'',remark:b.smsRemark??'',
      difficulty:b.smsDifficulty??'CSP-J',rated:!!(b.rated&&!['false','off','no','0'].includes(b.rated))};
