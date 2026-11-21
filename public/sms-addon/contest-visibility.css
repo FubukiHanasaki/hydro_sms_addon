@@ -1,0 +1,39 @@
+/* Only SMS visibility markers and hidden contest cards. */
+.sms-hidden-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid #a8b7c1;
+  border-radius: 3px;
+  background: #edf2f5;
+  color: #111;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.sms-hidden-badge::before,
+.sms-hidden-status::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6V4a4 4 0 018 0v2h1v9H3V6zm2 0h4V4a2 2 0 00-4 0zm1 4v2h2v-2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6V4a4 4 0 018 0v2h1v9H3V6zm2 0h4V4a2 2 0 00-4 0zm1 4v2h2v-2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.sms-hidden-status::before { margin-right: 5px; vertical-align: -1px; }
+.page--contest_main .section--contest.sms-contest-card-hidden {
+  background: linear-gradient(115deg, #637986, #4d6574);
+}
+.page--contest_main .section--contest.sms-contest-card-hidden .detail-button {
+  color: #172e3d;
+  background: #fff;
+}
+.page--contest_main .section--contest.sms-contest-card-hidden .detail-button:hover {
+  background: #eaf0f4;
+}
+.page--contest_main .section--contest.sms-contest-card-hidden .info .icon { color: #fff; }

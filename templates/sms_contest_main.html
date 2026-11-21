@@ -2,12 +2,12 @@
 {% extends "layout/basic.html" %}
 {% import "components/contest.html" as contest with context %}
 {% macro render_important_contest(view, title, tdoc) %}
-<div class="section immersive--content section--contest {{ view }}">
+<div class="section immersive--content section--contest {{ view }}{% if tdoc.smsHidden %} sms-contest-card-hidden{% endif %}">
   <div class="media">
     <div class="media__body middle">
       <div class="section__body">
         <div>
-          <h2 class="status_title">{{ '隐藏的比赛' if tdoc.smsHidden else _(title) }}</h2>
+          <h2 class="status_title{% if tdoc.smsHidden %} sms-hidden-status{% endif %}">{{ '隐藏的比赛' if tdoc.smsHidden else _(title) }}</h2>
         </div>
         <h1>{{ tdoc.title }}</h1>
         <ul class="info">
@@ -46,6 +46,7 @@
 </div>
 {% endmacro %}
 {% block content %}
+<link rel="stylesheet" href="/sms-addon/contest-visibility.css?v=20261122">
 <div class="row">
   <div class="medium-9 columns">
   {%- for tdoc in tdocs -%}
@@ -104,7 +105,7 @@
                   <li>
                     <a href="?rule={{ tdoc['rule'] }}" class="contest-type-tag"><span class="icon icon-award"></span>{{ _(model.contest.RULES[tdoc.rule].TEXT) }}</a>
                   </li>
-                  {% if tdoc.smsHidden %}<li class="sms-contest-hidden">隐藏的比赛</li>{% endif %}
+                  {% if tdoc.smsHidden %}<li class="sms-contest-hidden"><span class="sms-hidden-badge">隐藏的比赛</span></li>{% endif %}
                   {% if tdoc.rated %}
                     <li class="contest-tag-rated"><span class="icon icon-star"></span>Rated</li>
                   {% endif %}

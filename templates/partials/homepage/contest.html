@@ -1,6 +1,7 @@
 {% set tdocs = payload[0] %}
 {% set tsdict = payload[1] %}
 {% if tdocs.length %}
+  <link rel="stylesheet" href="/sms-addon/contest-visibility.css?v=20261122">
   <div class="section page--contest_main">
     <div class="section__header">
       <h1 class="section__title">{{ _('Contest') }}</h1>
@@ -21,7 +22,7 @@
                 <li>
                   <a href="{{ url('contest_main', query={rule:tdoc.rule}) }}" class="contest-type-tag"><span class="icon icon-award"></span>{{ _(model.contest.RULES[tdoc.rule].TEXT) }}</a>
                 </li>
-                {% if tdoc.smsHidden %}<li class="sms-contest-hidden">隐藏的比赛</li>{% endif %}
+                {% if tdoc.smsHidden %}<li class="sms-contest-hidden"><span class="sms-hidden-badge">隐藏的比赛</span></li>{% endif %}
                 {% if tdoc.rated %}
                   <li class="contest-tag-rated"><span class="icon icon-star"></span>Rated</li>
                 {% endif %}
