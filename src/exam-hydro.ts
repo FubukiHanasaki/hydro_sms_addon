@@ -1,5 +1,5 @@
 /* Copyright (C) 2026 FubukiHanasaki. AGPL-3.0-or-later. */
-import { visibilitySettings } from './exam-visibility';
+import { examHidden, visibilitySettings } from './exam-visibility';
 import { captureNative, resultFingerprint } from './exam-native';
 import { ObjectId } from 'mongodb';
 import { Context, ContestModel, DomainModel, UserModel, RecordModel, PERM, PRIV, ForbiddenError, ValidationError } from 'hydrooj';
@@ -58,6 +58,20 @@ export function installExams(ctx:Context,exams:ExamService){
   const ids=await hiddenIds(h);if(ids.length)filter.$and=[...(filter.$and??[]),{docId:{$nin:ids}}];
   h.response.addHeader('Cache-Control','private, no-store');
  });
+ // Annotate only the already-authorized native results, without changing the
+ // contest title or the underlying native document/status.
+ const markVisibility=async(domainId:string,docs:any[])=>{
+  if(!docs?.length)return;
+  const rows=await exams.exams.find({domainId,contestId:{$in:docs.map(c=>String(c.docId))}},{projection:{contestId:1,visibility:1,visibleAt:1}}).toArray();
+  const hidden=new Set(rows.filter(e=>examHidden(e)).map(e=>e.contestId));
+  for(const doc of docs)doc.smsHidden=hidden.has(String(doc.docId));
+ };
+ ctx.on('handler/after/ContestList',async(h:any)=>{
+  if(h.response.template!=='contest_main.html')return;
+  await markVisibility(h.domain._id,h.response.body.tdocs);
+  h.response.body.page_name='contest_main'; // Retain Hydro's list styles and filter controller.
+  h.response.template='sms_contest_main.html';
+ });
  ctx.on('handler/before/Home',async(h:any)=>{
   if(!h.getContest)return;
   h.getContest=async(domainId:string,limit=10)=>{
@@ -69,6 +83,7 @@ export function installExams(ctx:Context,exams:ExamService){
    const ids=await hiddenIds(h);if(ids.length)filter.docId={$nin:ids};
    // Filter before limit so hidden contests do not consume homepage slots.
    const docs=await ContestModel.getMulti(domainId,filter).sort({endAt:-1,beginAt:-1,_id:-1}).limit(limit).toArray();
+   await markVisibility(domainId,docs);
    return [docs,await ContestModel.getListStatus(domainId,h.user._id,docs.map((c:any)=>c.docId))];
   };
   h.response.addHeader('Cache-Control','private, no-store');
