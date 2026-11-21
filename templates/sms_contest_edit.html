@@ -28,6 +28,12 @@
  const visibility=fields.querySelector('[name="smsVisibility"]'),until=fields.querySelector('[name="smsVisibleAt"]');
  const syncVisibility=()=>{const timed=visibility.value==='until';document.getElementById('sms-visible-at').hidden=!timed;until.disabled=!timed;until.required=timed;};
  visibility.addEventListener('change',syncVisibility);syncVisibility();
+ // Validate before Hydro's submit-click throttle, so correcting the time can be saved immediately.
+ form.addEventListener('click',(event)=>{
+   const button=event.target.closest('button[type="submit"],input[type="submit"]');
+   if(!button||visibility.value!=='until'||until.validity.valid)return;
+   event.preventDefault();event.stopPropagation();until.reportValidity();
+ },true);
  {% if not smsEditor.canDelete %}form.querySelector('button[value="delete"]')?.remove();{% endif %}
  // One Rated control for both Hydro and SMS, including explicit false.
  const rated=form.querySelector('input[type="checkbox"][name="rated"]');
