@@ -169,7 +169,7 @@ export function installExams(ctx:Context,exams:ExamService){
   const prepare=h.prepare.bind(h);
   h.prepare=async(args:any)=>{await scopeRecords(h);return prepare(args);};
  });
- ctx.effect(()=>{const bridge={reviewRequired:true,correctionRecord,authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
+ ctx.effect(()=>{const bridge={reviewRequired:true,correctionRecord,configure:async(actor:number,domain:string,id:string)=>{const user=await UserModel.getById(domain,actor);return !!user?.hasPriv(PRIV.PRIV_USER_PROFILE)&&user.hasPerm(PERM.PERM_EDIT_CONTEST,PERM.PERM_EDIT_CONTEST_SELF)&&await exams.nativeAllowed(actor,domain,id,'exams.update');},authorize:(actor:number,domain:string,id?:string)=>exams.canUpload(actor,domain,id),participants:(actor:number,domain:string,id:string,uids:number[])=>exams.participants(actor,domain,id,uids),managed:async(domain:string,id:string)=>!!await exams.exams.findOne({_id:exams.key(domain,id)})};(globalThis as any)[EXAM_BRIDGE]=bridge;return()=>{if((globalThis as any)[EXAM_BRIDGE]===bridge)delete(globalThis as any)[EXAM_BRIDGE];};});
  // Apply the independent module scope to every native contest subpage/API,
  // while retaining all original Hydro checkers and hidden/assign restrictions.
  ctx.on('handler/before',async(h:any)=>{
@@ -220,11 +220,11 @@ export function installExams(ctx:Context,exams:ExamService){
   };
  });
  ctx.on('handler/after/ContestEdit',async(h:any)=>{
-  if(h.context.method!=='GET'||h.response.template!=='contest_edit.html'||h.tdoc&&!['oi','ioi','strictioi','acm'].includes(h.tdoc.rule))return;
+  if(h.context.method!=='GET'||!['contest_edit.html','offline_contest_edit.html'].includes(h.response.template)||h.tdoc&&!['oi','ioi','strictioi','acm'].includes(h.tdoc.rule))return;
   try {h.response.body.smsEditor=await exams.editor(h.user._id,h.domain._id,h.tdoc?String(h.tdoc.docId):undefined);}
   catch(err){if(err instanceof SmsError&&[403,409].includes(err.status))return;throw err;}
   h.response.addHeader('Cache-Control','private, no-store');
-  h.response.template='sms_contest_edit.html';
+  if(h.response.template==='offline_contest_edit.html')h.response.body.offlineEditBaseTemplate='sms_contest_edit.html';else h.response.template='sms_contest_edit.html';
  });
  ctx.on('handler/after/ContestDetail',async(h:any)=>{
   const id=String(h.tdoc?.docId??'');if(!/^[a-f\d]{24}$/i.test(id))return;const e=await exams.exams.findOne({_id:exams.key(h.domain._id,id)});if(!e)return;
